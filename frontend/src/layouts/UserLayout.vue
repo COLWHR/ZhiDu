@@ -2,15 +2,6 @@
   <div class="user-layout-container">
     <div class="user-layout-mask"></div>
     <div class="user-layout-content">
-      <div class="top-header">
-        <div class="header-logo">
-          <span class="title">多智能体圆桌论坛 (MADF)</span>
-        </div>
-        <div class="header-desc">
-          Next-Generation Multi-Agent Discussion Framework
-        </div>
-      </div>
-      
       <div class="main-content">
         <router-view />
       </div>
@@ -65,25 +56,7 @@
   align-items: center;
 }
 
-.top-header {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.header-logo .title {
-  font-size: 32px;
-  color: rgba(0, 0, 0, 0.85);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  font-weight: 600;
-  position: relative;
-  top: 2px;
-}
-
-.header-desc {
-  font-size: 14px;
-  color: rgba(0, 0, 0, 0.45);
-  margin-top: 12px;
-}
+/* 顶部header已移除 */
 
 .main-content {
   width: 100%;
@@ -122,8 +95,6 @@
     padding: 16px;
   }
   
-  .header-logo .title {
-    font-size: 24px;
-  }
+  /* 移动端标题样式已移除 */
 }
 </style>

@@ -1,7 +1,7 @@
 <template>
   <a-modal
     v-model:open="visible"
-    title="上帝模式：创造真实智能体 (联网版)"
+    title="女娲（智能创建）"
     width="1000px"
     :footer="null"
     @cancel="handleCancel"
@@ -107,7 +107,7 @@
           </div>
           <div class="content-wrapper">
             <div class="bubble loading">
-              <a-spin size="small" /> 正在呼唤上帝...
+              <a-spin size="small" /> 正在呼唤女娲...
             </div>
           </div>
         </div>
@@ -190,7 +190,7 @@ watch(() => props.open, (val) => {
       messages.value.push({
         role: 'assistant',
         content: '',
-        items: [{ type: 'text', content: '我是联网版上帝智能体。我可以搜索互联网信息，为您创造基于真实背景的深度角色。' }],
+        items: [{ type: 'text', content: '我是女娲智能体，您的智能助手。我可以根据您的描述，为您创建基于真实背景的深度角色。' }],
         timestamp: Date.now()
       })
     }

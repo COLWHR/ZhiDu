@@ -1,16 +1,22 @@
 <template>
   <div class="persona-page">
+    <div class="welcome-section fade-in-up">
+      <div class="welcome-content">
+        <div class="welcome-text">
+          <h2 class="welcome-title">智能体工坊</h2>
+          <p class="welcome-subtitle">管理您的智能体角色，定义个性与认知体系</p>
+        </div>
+        <div class="greeting-emoji">🤖</div>
+      </div>
+    </div>
+    
     <div class="persona-content-wrapper">
         <div class="page-header">
-          <div class="header-title">
-            <span class="title">智能体工坊</span>
-            <span class="subtitle">管理您的智能体角色，定义个性与认知体系</span>
-          </div>
           <a-space>
-            <a-button type="primary" ghost @click="showRealGodModal" class="real-god-btn">
-              <global-outlined /> 上帝生成真实角色 (联网)
+            <a-button type="primary" ghost style="border-color: #667eea; color: #667eea;" @click="showRealGodModal" class="real-god-btn">
+              <global-outlined /> 女娲（智能创建）
             </a-button>
-            <a-button type="primary" @click="showModal()">
+            <a-button type="primary" style="background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%); border: none;" @click="showModal()">
               <plus-outlined /> 创建智能体
             </a-button>
           </a-space>
@@ -34,7 +40,9 @@
                         </a-avatar>
                         <div class="name-title">
                           <div class="name" :title="persona.name">{{ persona.name }}</div>
-                          <div class="title" :title="persona.title || '暂无头衔'">{{ persona.title || '暂无头衔' }}</div>
+                          <div class="title" :title="persona.title || '暂无头衔'">
+                            {{ persona.title || '暂无头衔' }}
+                          </div>
                         </div>
                       </div>
                       <div class="actions">
@@ -388,15 +396,51 @@ const showRealGodModal = () => {
 
 <style scoped>
 .persona-page {
-  height: 100%;
-  overflow-y: auto;
-  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+  min-height: 100vh;
+}
+
+.welcome-section {
+  margin-bottom: 32px;
+}
+
+.welcome-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%);
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+}
+
+.welcome-text {
+  color: white;
+}
+
+.welcome-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: white;
+}
+
+.welcome-subtitle {
+  font-size: 15px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.greeting-emoji {
+  font-size: 48px;
 }
 
 .persona-content-wrapper {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 0;
 }
 
 .page-header {
@@ -404,23 +448,6 @@ const showRealGodModal = () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
-}
-
-.header-title {
-  display: flex;
-  flex-direction: column;
-}
-
-.title {
-  font-size: 24px;
-  font-weight: 500;
-  color: rgba(0,0,0,0.85);
-}
-
-.subtitle {
-  font-size: 14px;
-  color: rgba(0,0,0,0.45);
-  margin-top: 4px;
 }
 
 .persona-grid {
@@ -433,9 +460,10 @@ const showRealGodModal = () => {
 }
 
 .persona-grid-container {
-  height: calc(100vh - 280px);
+  min-height: 600px;
   display: flex;
   flex-direction: column;
+  gap: 16px;
 }
 
 .pagination-wrapper {
