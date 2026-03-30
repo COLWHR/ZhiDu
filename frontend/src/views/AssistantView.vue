@@ -809,7 +809,16 @@ const handleAdd = () => {
 
 const addToAgentWorkshop = () => {
   if (selectedAgent.value) {
-    personaStore.createPersona(selectedAgent.value);
+    const personaData = {
+      name: selectedAgent.value.name,
+      title: selectedAgent.value.description,
+      bio: selectedAgent.value.description,
+      stance: selectedAgent.value.description,
+      system_prompt: selectedAgent.value.prompt,
+      theories: selectedAgent.value.group || [],
+      is_public: false
+    };
+    personaStore.createPersona(personaData);
     showToastMessage('已添加到智能体工坊');
     showModal.value = false;
   }
