@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     MODEL_NAME: Optional[str] = None
     BASE_URL: Optional[str] = None
     
+    # 火山引擎视觉大模型配置
+    VOLC_API_KEY: Optional[str] = None
+    VOLC_VISION_MODEL: Optional[str] = "doubao-vision-pro-12k"
+    VOLC_BASE_URL: Optional[str] = "https://aquasearch.volces.com/api/v3/"
+    
     @property
     def final_api_key(self) -> str:
         key = self.API_KEY or os.environ.get("API_KEY") or os.environ.get("ZHIPUAI_API_KEY")

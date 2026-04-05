@@ -353,3 +353,43 @@ def create_message(db, message: MessageCreate):
 def get_forum_messages(db, forum_id: int):
     rs = db.execute("SELECT * FROM messages WHERE forum_id = ? ORDER BY timestamp ASC", [forum_id])
     return fetch_all(rs)
+
+# --- Chat Messages (时空之门单聊历史) ---
+def save_chat_message(db, user_id: int, persona_id: int, role: str, content: str):
+    """保存单聊消息"""
+    try:
+        created_at = datetime.now()
+        rs = db_execute_commit(
+            db,
+            """
+            INSERT INTO chat_messages (user_id, persona_id, role, content, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            RETURNING *
+            """,
+            [user_id, persona_id, role, content, created_at]
+        )
+        return fetch_one(rs)
+    except Exception as e:
+        logger.error(f"Error saving chat message: {e}")
+        raise
+
+def get_chat_history(db, user_id: int, persona_id: int):
+    """获取用户与指定智能体的聊天历史"""
+    rs = db.execute(
+        "SELECT * FROM chat_messages WHERE user_id = ? AND persona_id = ? ORDER BY created_at ASC",
+        [user_id, persona_id]
+    )
+    return fetch_all(rs)
+
+def clear_chat_history(db, user_id: int, persona_id: int):
+    """清空用户与指定智能体的聊天历史"""
+    try:
+        rs = db_execute_commit(
+            db,
+            "DELETE FROM chat_messages WHERE user_id = ? AND persona_id = ?",
+            [user_id, persona_id]
+        )
+        return rs is not None
+    except Exception as e:
+        logger.error(f"Error clearing chat history: {e}")
+        raise

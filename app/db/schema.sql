@@ -109,3 +109,15 @@ CREATE TABLE IF NOT EXISTS system_logs (
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (forum_id) REFERENCES forums(id) ON DELETE CASCADE
 );
+
+-- Chat Messages table (时空之门单聊历史)
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    persona_id INTEGER NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE
+);

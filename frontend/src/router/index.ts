@@ -60,6 +60,11 @@ const router = createRouter({
           path: 'assistants',
           name: 'assistants',
           component: AssistantView
+        },
+        {
+          path: 'time-gate',
+          name: 'time-gate',
+          component: () => import('@/views/TimeGateView.vue')
         }
       ]
     },

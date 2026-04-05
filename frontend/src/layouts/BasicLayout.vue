@@ -35,6 +35,11 @@
             <span>助手仓库</span>
         </a-menu-item>
 
+        <a-menu-item key="time-gate" @click="navigateTo('/time-gate')" class="nav-item">
+            <clock-circle-outlined class="nav-icon" />
+            <span>时空之门</span>
+        </a-menu-item>
+
         <div class="menu-divider"></div>
         
         <a-menu-item key="logout" @click="handleLogout" class="nav-item logout-item">
@@ -63,6 +68,7 @@ import {
   TeamOutlined,
   CommentOutlined,
   AppstoreOutlined,
+  ClockCircleOutlined,
   LogoutOutlined
 } from '@ant-design/icons-vue'
 
@@ -85,6 +91,7 @@ const selectedKeys = computed(() => {
   if (route.path.startsWith('/personas')) return ['personas']
   if (route.path.startsWith('/forums')) return ['forums']
   if (route.path.startsWith('/assistants')) return ['assistants']
+  if (route.path.startsWith('/time-gate')) return ['time-gate']
   return []
 })
 </script>
