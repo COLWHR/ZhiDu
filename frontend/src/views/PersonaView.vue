@@ -212,6 +212,7 @@
             设为公开智能体 (其他用户可见)
           </a-checkbox>
         </a-form-item>
+
       </a-form>
     </a-modal>
 
@@ -244,9 +245,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, computed, createVNode } from 'vue'
+import { onMounted, reactive, ref, computed, createVNode, watch } from 'vue'
 import { usePersonaStore, type Persona } from '@/stores/persona'
+import { useAuthStore } from '@/stores/auth'
 import { message, Modal } from 'ant-design-vue'
+import request from '@/utils/request'
 import RealGodAgentModal from '@/components/god/RealGodAgentModal.vue'
 import {
   PlusOutlined,
@@ -259,6 +262,7 @@ import {
 } from '@ant-design/icons-vue'
 
 const personaStore = usePersonaStore()
+const authStore = useAuthStore()
 const visible = ref(false)
 const detailsVisible = ref(false)
 const realGodModalVisible = ref(false)
@@ -266,6 +270,7 @@ const submitting = ref(false)
 const editingId = ref<number | null>(null)
 const activeTab = ref('grid')
 const currentPersona = ref<Persona | null>(null)
+
 
 // Pagination
 const currentPage = ref(1)
@@ -495,6 +500,8 @@ const showRealGodModal = () => {
   transform: translateY(-4px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
+
+
 
 .card-header {
   display: flex;

@@ -429,11 +429,7 @@ const uploadAndInsertImage = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     
-    const res = await request.post('/upload/image', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
+    const res = await request.post('/upload/image', formData);
     
     if (res.data && res.data.url) {
       const imageMarkdown = `![image](${res.data.url})\n`;

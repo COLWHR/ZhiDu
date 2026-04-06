@@ -121,3 +121,5 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE
 );
+
+

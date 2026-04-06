@@ -12,7 +12,7 @@ UPLOAD_DIR = "uploads"
 # Create upload directory if it doesn't exist
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-@router.post("/upload")
+@router.post("/upload/image")
 async def upload_file(file: UploadFile = File(...)):
     try:
         # Generate unique filename

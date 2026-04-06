@@ -157,6 +157,7 @@
               />
           </a-form-item>
           
+
           <div class="modal-actions">
             <a-button size="large" @click="visible = false" class="cancel-btn">
               取消
@@ -172,14 +173,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, computed } from 'vue'
+import { onMounted, reactive, ref, computed, watch } from 'vue'
 import { useForumStore } from '@/stores/forum'
 import { usePersonaStore } from '@/stores/persona'
+import { useAuthStore } from '@/stores/auth'
 import { message } from 'ant-design-vue'
+import request from '@/utils/request'
 import { PlusOutlined, ArrowRightOutlined, DeleteOutlined, ClockCircleOutlined, UserOutlined } from '@ant-design/icons-vue'
 
 const forumStore = useForumStore()
 const personaStore = usePersonaStore()
+const authStore = useAuthStore()
 const visible = ref(false)
 const submitting = ref(false)
 const formRef = ref()
@@ -579,6 +583,11 @@ const handleDelete = async (id: number) => {
   padding: 10px 14px;
   border-radius: 8px;
   line-height: 1.5;
+}
+
+.cost-tip {
+  margin-top: 8px;
+  margin-bottom: 16px;
 }
 
 .select-option {

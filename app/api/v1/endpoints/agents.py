@@ -3,8 +3,11 @@ from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from pydantic import BaseModel
 import json
+import logging
 from utils import get_chat_completion
 from app.api.deps import get_current_user
+
+logger = logging.getLogger(__name__)
 
 from app.db.session import get_db
 from app.schemas import MessageResponse

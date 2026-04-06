@@ -55,4 +55,9 @@ def register(user: UserCreate, db: Any = Depends(get_db)):
     db_user = get_user_by_username(db, user.username)
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
-    return create_user(db=db, user=user)
+    
+    # 创建用户
+    new_user = create_user(db=db, user=user)
+    logger.info(f"New user {new_user.username} registered")
+    
+    return new_user

@@ -393,3 +393,5 @@ def clear_chat_history(db, user_id: int, persona_id: int):
     except Exception as e:
         logger.error(f"Error clearing chat history: {e}")
         raise
+
+

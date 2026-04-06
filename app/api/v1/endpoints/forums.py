@@ -40,18 +40,14 @@ def obj_to_dict(obj):
 def create_new_forum(
     forum: ForumCreate, 
     current_user: Annotated[Any, Depends(get_current_user)],
-    service: ForumService = Depends(get_forum_service)
+    service: ForumService = Depends(get_forum_service),
+    db: Any = Depends(get_db)
 ):
     try:
         result = service.create_new_forum(forum, current_user.id)
         
         # Invalidate list cache for this user
         cache_service.delete_keys_pattern(f"forums:list:{current_user.id}:*")
-        
-        # Ensure result is compatible with ForumResponse
-        # If result.summary_history is a string, it might need parsing if Pydantic doesn't handle it
-        # But Pydantic validator in ForumResponse should handle it.
-        # However, if result is a RowObject, Pydantic's from_attributes=True should handle it.
         
         return result
     except Exception as e:

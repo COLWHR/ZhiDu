@@ -14,6 +14,8 @@
         <span v-if="!collapsed" class="logo-text">智渡</span>
         <span v-else class="logo-text">渡</span>
       </div>
+      
+
       <a-menu :selectedKeys="selectedKeys" theme="light" mode="inline" class="nav-menu">
         <a-menu-item key="dashboard" @click="navigateTo('/dashboard')" class="nav-item">
             <dashboard-outlined class="nav-icon" />
@@ -60,9 +62,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { message } from 'ant-design-vue'
+import request from '@/utils/request'
 import {
   DashboardOutlined,
   TeamOutlined,
@@ -94,6 +98,13 @@ const selectedKeys = computed(() => {
   if (route.path.startsWith('/time-gate')) return ['time-gate']
   return []
 })
+
+// 监听登录状态
+watch(() => authStore.token, (token) => {
+  if (!token) {
+    router.push('/login')
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>
@@ -110,6 +121,8 @@ const selectedKeys = computed(() => {
   white-space: nowrap;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
 }
+
+
 
 .logo-icon {
   width: 36px;

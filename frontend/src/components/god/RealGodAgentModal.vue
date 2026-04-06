@@ -31,7 +31,7 @@
 
                <!-- Structured Items -->
                <div v-for="(item, i) in msg.items" :key="i" class="msg-item">
-                 
+                  
                  <!-- 1. Normal Text -->
                  <div v-if="item.type === 'text'" class="bubble">
                    {{ item.content }}
@@ -135,7 +135,7 @@
 <script setup lang="ts">
 import { ref, nextTick, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { usePersonaStore } from '@/stores/persona'
 import { SendOutlined } from '@ant-design/icons-vue'
 
@@ -205,179 +205,198 @@ watch(() => messages.value[messages.value.length - 1]?.items, scrollToBottom, { 
 const handleSend = async () => {
   if (!input.value.trim() || loading.value) return
   
-  const prompt = input.value
-  input.value = ''
+  // 检查渡币数量
+  const coins = parseInt(localStorage.getItem('coins') || '0')
+  const COST_PER_ROLE = 30
   
-  // Add user message
-  messages.value.push({
-    role: 'user',
-    content: prompt,
-    timestamp: Date.now()
-  })
+  if (coins < COST_PER_ROLE) {
+    message.error('渡币不足，创建角色需要30渡币')
+    return
+  }
   
-  loading.value = true
-  totalToGenerate.value = 1 // Reset
-  
-  // Prepare assistant message container
-  const assistantMsg = ref<ChatMessage>({
-    role: 'assistant',
-    items: [],
-    timestamp: Date.now()
-  })
-  messages.value.push(assistantMsg.value)
-  
-  try {
-    // Fetch SSE
-    const response = await fetch('/api/v1/god/generate_real', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      },
-      body: JSON.stringify({ prompt, n: 1 })
-    })
-
-    if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const reader = response.body?.getReader()
-    const decoder = new TextDecoder()
-    
-    if (!reader) throw new Error('No reader')
-
-    let buffer = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
+  // 弹出确认窗口
+  Modal.confirm({
+    title: '消耗渡币确认',
+    content: `创建每个角色需要消耗 ${COST_PER_ROLE} 渡币，是否继续？`,
+    okText: '同意',
+    cancelText: '取消',
+    onOk: () => {
+      // 立即执行同步操作，让窗口快速关闭
+      const prompt = input.value
+      input.value = ''
       
-      buffer += decoder.decode(value, { stream: true })
+      // 扣除渡币
+      const newCoins = coins - COST_PER_ROLE
+      localStorage.setItem('coins', newCoins.toString())
+      message.success(`已扣除 ${COST_PER_ROLE} 渡币，剩余 ${newCoins} 渡币`)
       
-      const parts = buffer.split('\n\n')
-      buffer = parts.pop() || ''
+      // Add user message
+      messages.value.push({
+        role: 'user',
+        content: prompt,
+        timestamp: Date.now()
+      })
       
-      for (const line of parts) {
-        if (line.trim().startsWith('data: ')) {
-          try {
-            const jsonStr = line.trim().slice(6)
-            if (!jsonStr) continue
+      loading.value = true
+      totalToGenerate.value = 1 // Reset
+      
+      // Prepare assistant message container
+      const assistantMsg = ref<ChatMessage>({
+        role: 'assistant',
+        items: [],
+        timestamp: Date.now()
+      })
+      messages.value.push(assistantMsg.value);
+      
+      // 异步执行网络请求，不阻塞窗口关闭
+      (async () => {
+        try {
+          // Fetch SSE
+          const response = await fetch('/api/v1/god/generate_real', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+            },
+            body: JSON.stringify({ prompt, n: 1 })
+          })
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`)
+          }
+
+          const reader = response.body?.getReader()
+          const decoder = new TextDecoder()
+          
+          if (!reader) throw new Error('No reader')
+
+          let buffer = ''
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
             
-            const event = JSON.parse(jsonStr)
-            const items = assistantMsg.value.items || []
+            buffer += decoder.decode(value, { stream: true })
             
-            if (event.type === 'count') {
-                totalToGenerate.value = event.content
-                
-            } else if (event.type === 'thought_start') {
-                // High level status update
-                items.push({ type: 'status', content: event.content })
-                
-            } else if (event.type === 'progress') {
-                // Update total and find the last status item to update
-                if (event.total) totalToGenerate.value = event.total
-                
-                // Find last status item
-                const lastStatus = [...items].reverse().find(i => i.type === 'status')
-                if (lastStatus) {
-                    lastStatus.content = `=== 开始生成第 ${event.current} 位角色 (共 ${event.total} 位) ===`
-                }
-                
-            } else if (event.type === 'thought_chunk') {
-                // Find active thought item or create one
-                let lastItem = items[items.length - 1]
-                
-                // Skip creating thought item if the last item is status (which happens at start)
-                // But we need to put thoughts SOMEWHERE.
-                // If last item is status, create a thought item.
-                if (!lastItem || lastItem.type !== 'thought') {
-                    lastItem = { type: 'thought', content: '' }
-                    items.push(lastItem)
-                }
-                lastItem.content += event.content
-                
-            } else if (event.type === 'thought') {
-                // Finalized thought (cleaned up)
-                // Update the last thought item if exists
-                let lastItem = items[items.length - 1]
-                if (lastItem && lastItem.type === 'thought') {
-                    lastItem.content = event.content
-                } else {
-                    items.push({ type: 'thought', content: event.content })
-                }
-                
-            } else if (event.type === 'action') {
-                // e.g. "搜索: keyword"
-                const content = event.content
-                if (content.includes('搜索') || content.includes('Search')) {
-                    // Extract query roughly
-                    const query = content.replace(/搜索[:：]|Search\[|\]/g, '').trim()
-                    items.push({ type: 'search', query: query, status: 'loading', result: '' })
-                } else {
-                    // Other actions (like Finish) - maybe log as text?
-                    // Usually Finish is handled by result event, but the Action: Finish log exists.
-                    // We can ignore Finish action log or show as text.
-                    // Let's show as debug/text if not search
-                    // items.push({ type: 'text', content: `[Action] ${content}` })
-                }
-                
-            } else if (event.type === 'observation') {
-                // Update last search item
-                // Find the last search item that is loading
-                // Reverse search
-                let searchItem = [...items].reverse().find(i => i.type === 'search' && i.status === 'loading')
-                if (searchItem) {
-                    searchItem.status = 'done'
-                    // Fix: Clean up observation content if it contains raw JSON string artifacts
-                    let cleanContent = event.content;
-                    // Check if content looks like a JSON string dump (starts with " and ends with ")
-                    // and try to parse it if it's double encoded
-                    if (typeof cleanContent === 'string') {
+            const parts = buffer.split('\n\n')
+            buffer = parts.pop() || ''
+            
+            for (const line of parts) {
+              if (line.trim().startsWith('data: ')) {
+                try {
+                  const jsonStr = line.trim().slice(6)
+                  if (!jsonStr) continue
+                  
+                  const event = JSON.parse(jsonStr)
+                  const items = assistantMsg.value.items || []
+                  
+                  if (event.type === 'count') {
+                    totalToGenerate.value = event.content
+                  } else if (event.type === 'thought_start') {
+                    // High level status update
+                    items.push({ type: 'status', content: event.content })
+                  } else if (event.type === 'progress') {
+                    // Update total and find the last status item to update
+                    if (event.total) totalToGenerate.value = event.total
+                    
+                    // Find last status item
+                    const lastStatus = [...items].reverse().find(i => i.type === 'status')
+                    if (lastStatus) {
+                      lastStatus.content = `=== 开始生成第 ${event.current} 位角色 (共 ${event.total} 位) ===`
+                    }
+                  } else if (event.type === 'thought_chunk') {
+                    // Find active thought item or create one
+                    let lastItem = items[items.length - 1]
+                    
+                    // Skip creating thought item if the last item is status (which happens at start)
+                    // But we need to put thoughts SOMEWHERE.
+                    // If last item is status, create a thought item.
+                    if (!lastItem || lastItem.type !== 'thought') {
+                      lastItem = { type: 'thought', content: '' }
+                      items.push(lastItem)
+                    }
+                    lastItem.content += event.content
+                  } else if (event.type === 'thought') {
+                    // Finalized thought (cleaned up)
+                    // Update the last thought item if exists
+                    let lastItem = items[items.length - 1]
+                    if (lastItem && lastItem.type === 'thought') {
+                      lastItem.content = event.content
+                    } else {
+                      items.push({ type: 'thought', content: event.content })
+                    }
+                  } else if (event.type === 'action') {
+                    // e.g. "搜索: keyword"
+                    const content = event.content
+                    if (content.includes('搜索') || content.includes('Search')) {
+                      // Extract query roughly
+                      const query = content.replace(/搜索[:：]|Search\[|\]/g, '').trim()
+                      items.push({ type: 'search', query: query, status: 'loading', result: '' })
+                    } else {
+                      // Other actions (like Finish) - maybe log as text?
+                      // Usually Finish is handled by result event, but the Action: Finish log exists.
+                      // We can ignore Finish action log or show as text.
+                      // Let's show as debug/text if not search
+                      // items.push({ type: 'text', content: `[Action] ${content}` })
+                    }
+                  } else if (event.type === 'observation') {
+                    // Update last search item
+                    // Find the last search item that is loading
+                    // Reverse search
+                    let searchItem = [...items].reverse().find(i => i.type === 'search' && i.status === 'loading')
+                    if (searchItem) {
+                      searchItem.status = 'done'
+                      // Fix: Clean up observation content if it contains raw JSON string artifacts
+                      let cleanContent = event.content;
+                      // Check if content looks like a JSON string dump (starts with " and ends with ")
+                      // and try to parse it if it's double encoded
+                      if (typeof cleanContent === 'string') {
                         // Remove potential surrounding quotes and unescape
                         // But simple approach: just display it. Pre tag handles formatting.
-                        // If user complains about specific artifacts like "[ \n " \n \", handle them:
+                        // If user complains about specific artifacts like "[ \n " \n ", handle them:
                         if (cleanContent.startsWith('[\n "') || cleanContent.startsWith('["')) {
-                             try {
-                                 const parsed = JSON.parse(cleanContent);
-                                 if (Array.isArray(parsed)) {
-                                     cleanContent = parsed.join('\n');
-                                 }
-                             } catch (e) {
-                                 // ignore
-                             }
+                          try {
+                            const parsed = JSON.parse(cleanContent);
+                            if (Array.isArray(parsed)) {
+                              cleanContent = parsed.join('\n');
+                            }
+                          } catch (e) {
+                            // ignore
+                          }
                         }
+                      }
+                      searchItem.result = cleanContent
+                    } else {
+                      // Fallback
+                      items.push({ type: 'text', content: `[Observation] ${event.content}` })
                     }
-                    searchItem.result = cleanContent
-                } else {
-                    // Fallback
-                    items.push({ type: 'text', content: `[Observation] ${event.content}` })
+                  } else if (event.type === 'result') {
+                    // Persona(s) generated
+                    const results = Array.isArray(event.content) ? event.content : [event.content]
+                    for (const p of results) {
+                      items.push({ type: 'persona', persona: p })
+                    }
+                    items.push({ type: 'text', content: `✅ 生成完成！` })
+                  } else if (event.type === 'error') {
+                    items.push({ type: 'error', content: event.content })
+                    message.error('生成过程中发生错误')
+                  }
+                  
+                  scrollToBottom()
+                } catch (e) {
+                  console.error('JSON parse error', e)
                 }
-                
-            } else if (event.type === 'result') {
-                // Persona(s) generated
-                const results = Array.isArray(event.content) ? event.content : [event.content]
-                for (const p of results) {
-                    items.push({ type: 'persona', persona: p })
-                }
-                items.push({ type: 'text', content: `✅ 生成完成！` })
-                
-            } else if (event.type === 'error') {
-                items.push({ type: 'error', content: event.content })
-                message.error('生成过程中发生错误')
+              }
             }
-            
-            scrollToBottom()
-          } catch (e) {
-            console.error('JSON parse error', e)
           }
-        }
-      }
-    }
 
-  } catch (error: any) {
-    assistantMsg.value.items?.push({ type: 'error', content: error.message || '网络请求失败' })
-  } finally {
-    loading.value = false
-  }
+        } catch (error: any) {
+          assistantMsg.value.items?.push({ type: 'error', content: error.message || '网络请求失败' })
+        } finally {
+          loading.value = false
+        }
+      })()
+    }
+  })
 }
 
 const handleCancel = () => {
@@ -610,3 +629,4 @@ watch(visible, (newVal) => {
   gap: 6px;
 }
 </style>
+

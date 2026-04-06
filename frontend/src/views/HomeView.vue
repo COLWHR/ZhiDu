@@ -45,10 +45,14 @@
       </a-col>
       <a-col :xs="12" :sm="6">
         <div class="stat-card stat-card-4">
-          <div class="stat-icon">⭐</div>
+          <div class="stat-icon">💰</div>
           <div class="stat-content">
-            <div class="stat-number">{{ today }}</div>
-            <div class="stat-label">今日</div>
+            <div class="stat-number">{{ coins }}</div>
+            <div class="stat-label">渡币</div>
+          </div>
+          <div class="checkin-button" @click="handleCheckIn">
+            <div v-if="!checkedInToday" class="checkin-badge">每日签到</div>
+            <div v-else class="checked-badge">已签到</div>
           </div>
         </div>
       </a-col>
@@ -158,15 +162,54 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useForumStore } from '@/stores/forum'
 import { usePersonaStore } from '@/stores/persona'
 import { TeamOutlined, CommentOutlined, LogoutOutlined, ClockCircleOutlined } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
 
 const authStore = useAuthStore()
 const forumStore = useForumStore()
 const personaStore = usePersonaStore()
+
+// 渡币和签到相关
+const coins = ref(0)
+const checkedInToday = ref(false)
+
+const handleCheckIn = () => {
+  if (checkedInToday.value) {
+    message.info('今日已签到')
+    return
+  }
+  
+  // 模拟签到获得渡币
+  const reward = 10
+  coins.value += reward
+  checkedInToday.value = true
+  
+  // 保存签到状态到本地存储
+  localStorage.setItem('checkedInDate', new Date().toDateString())
+  localStorage.setItem('coins', coins.value.toString())
+  
+  message.success(`签到成功！获得 ${reward} 渡币`)
+}
+
+const checkCheckInStatus = () => {
+  const lastCheckedIn = localStorage.getItem('checkedInDate')
+  const today = new Date().toDateString()
+  checkedInToday.value = lastCheckedIn === today
+  
+  // 从本地存储加载渡币数量
+  const savedCoins = localStorage.getItem('coins')
+  if (savedCoins) {
+    coins.value = parseInt(savedCoins)
+  } else {
+    // 初始渡币数量
+    coins.value = 100
+    localStorage.setItem('coins', '100')
+  }
+}
 
 const today = computed(() => {
   const d = new Date()
@@ -220,6 +263,7 @@ const getStatusText = (status: string) => {
 onMounted(() => {
   forumStore.fetchForums()
   personaStore.fetchPersonas(authStore.user?.id)
+  checkCheckInStatus()
 })
 </script>
 
@@ -293,6 +337,14 @@ onMounted(() => {
   cursor: pointer;
 }
 
+.stat-card-4 {
+  justify-content: space-between;
+}
+
+.checkin-button {
+  flex-shrink: 0;
+}
+
 .stat-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
@@ -341,6 +393,35 @@ onMounted(() => {
   font-size: 13px;
   color: #888;
   font-weight: 500;
+}
+
+.checkin-badge {
+  font-size: 11px;
+  color: #ff6b6b;
+  font-weight: 600;
+  background: #fff1f0;
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-block;
+  margin-top: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.checkin-badge:hover {
+  background: #ffccc7;
+  transform: scale(1.05);
+}
+
+.checked-badge {
+  font-size: 11px;
+  color: #52c41a;
+  font-weight: 600;
+  background: #f6ffed;
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-block;
+  margin-top: 4px;
 }
 
 .content-row {

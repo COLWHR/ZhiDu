@@ -35,12 +35,13 @@ def create_new_persona(
     # If is_public is True, user must be admin or god (implied requirement)
     if persona.is_public and current_user.role not in ["admin", "god"]:
         raise HTTPException(status_code=403, detail="Not authorized to create public personas")
+    
+
 
     new_persona = create_persona(db=db, persona=persona, owner_id=current_user.id)
     
     # CRITICAL: Fix cache pattern to match what delete_keys_pattern expects
-    # In redis scan, the pattern is passed directly.
-    # The cache key function is: personas:list:{owner_id}:{skip}:{limit}
+    # In redis scan, the pattern is: personas:list:{owner_id}:{skip}:{limit}
     # So we should delete personas:list:{owner_id}:*
     # However, delete_keys_pattern uses scan_iter(match=pattern).
     # Redis scan match pattern works like glob.
