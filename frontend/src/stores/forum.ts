@@ -145,9 +145,9 @@ export const useForumStore = defineStore('forum', {
                 this.ws.close(1000, "Client initiated disconnect")
             } catch (e) { /* ignore */ }
             this.ws = null
-            this.isConnected = false
-            this.wsForumId = null
         }
+        this.isConnected = false
+        this.wsForumId = null
     },
 
     connectWebSocket(forumId: number) {
@@ -165,7 +165,9 @@ export const useForumStore = defineStore('forum', {
         this.isManuallyClosed = false
         this.wsForumId = forumId
         const wsBase = this.resolveWsBase()
-        const wsUrl = `${wsBase}/api/v1/forums/${forumId}/ws`
+        const token = localStorage.getItem('token') || ''
+        const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : ''
+        const wsUrl = `${wsBase}/api/v1/forums/${forumId}/ws${tokenQuery}`
         const maxReconnectAttempts = 10
 
         console.log(`[WS Global] Connecting to: ${wsUrl}`)
@@ -574,6 +576,7 @@ export const useForumStore = defineStore('forum', {
         message.success('论坛已开始')
         if (this.currentForum && this.currentForum.id === id) {
             this.currentForum.status = 'running'
+            this.saveToStorage()
         }
       } catch (error) {
         console.error('Failed to start forum:', error)
@@ -614,7 +617,9 @@ export const useForumStore = defineStore('forum', {
             if (f) f.status = 'closed'
             if (this.currentForum && this.currentForum.id === id) {
                 this.currentForum.status = 'closed'
+                this.saveToStorage()
             }
+            this.disconnectWebSocket()
             message.success('论坛已停止')
         } catch (error) {
             console.error('Failed to stop forum:', error)

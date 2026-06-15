@@ -1,19 +1,33 @@
-import axios, { type AxiosRequestConfig, type Canceler } from 'axios'
+import axios, { type AxiosRequestConfig, type AxiosResponse, type Canceler } from 'axios'
 import { message } from 'ant-design-vue'
+import { getActivePinia } from 'pinia'
+import {
+  clearAuthSession,
+  getAccessToken,
+  getRefreshToken,
+  isAccessTokenExpiringSoon,
+  isRefreshTokenValid,
+  normalizeAuthTokenPayload,
+  saveAuthSession,
+} from './auth-session'
 
-// 请求缓存配置
 const requestCache = new Map<string, { data: any; timestamp: number }>()
-const CACHE_EXPIRE_TIME = 5 * 60 * 1000 // 缓存有效期5分钟
-
-// 取消重复请求配置
+const CACHE_EXPIRE_TIME = 5 * 60 * 1000
 const pendingRequest = new Map<string, Canceler>()
+let refreshPromise: Promise<boolean> | null = null
 
-// 生成请求唯一key
-const generateRequestKey = (config: AxiosRequestConfig): string => {
+type RetryableAxiosConfig = AxiosRequestConfig & { _retry?: boolean }
+
+type CachedResponseError = Error & {
+  __fromCache?: boolean
+  cachedResponse?: AxiosResponse
+}
+
+const generateRequestKey = (config: AxiosRequestConfig, token: string = ''): string => {
   const { url, method, params, data } = config
   let dataStr = ''
+
   if (data instanceof FormData) {
-    // 对于FormData，使用特殊处理，避免JSON.stringify返回"{}"
     dataStr = 'FormData-' + Array.from(data.entries()).map(([key, value]) => {
       if (value instanceof File) {
         return `${key}=${value.name}`
@@ -23,15 +37,16 @@ const generateRequestKey = (config: AxiosRequestConfig): string => {
   } else {
     dataStr = JSON.stringify(data)
   }
-  return [url || '', method || '', JSON.stringify(params), dataStr].join('&')
+
+  return [url || '', method || '', token, JSON.stringify(params), dataStr].join('&')
 }
 
-// 添加pending请求
 const addPendingRequest = (config: AxiosRequestConfig) => {
   if (!config) return
+
   try {
     const requestKey = generateRequestKey(config)
-    (config as any).cancelToken = config.cancelToken || new axios.CancelToken((cancel) => {
+    ;(config as any).cancelToken = config.cancelToken || new axios.CancelToken((cancel) => {
       if (!pendingRequest.has(requestKey)) {
         pendingRequest.set(requestKey, cancel)
       }
@@ -41,9 +56,9 @@ const addPendingRequest = (config: AxiosRequestConfig) => {
   }
 }
 
-// 移除pending请求
 const removePendingRequest = (config: AxiosRequestConfig) => {
   if (!config) return
+
   try {
     const requestKey = generateRequestKey(config)
     if (pendingRequest.has(requestKey)) {
@@ -57,67 +72,146 @@ const removePendingRequest = (config: AxiosRequestConfig) => {
 }
 
 const request = axios.create({
-  // Base URL for the API
   baseURL: '/api/v1',
-  timeout: 60000 // Increased timeout to 60s for AI generation requests
+  timeout: 60000,
 })
 
+const syncAuthStoreFromStorage = async () => {
+  if (!getActivePinia()) {
+    return
+  }
+
+  try {
+    const { useAuthStore } = await import('@/stores/auth')
+    const authStore = useAuthStore()
+    authStore.syncSessionFromStorage()
+  } catch (error) {
+    console.error('Failed to sync auth store:', error)
+  }
+}
+
+const clearAuthState = async () => {
+  clearAuthSession()
+  clearRequestCache()
+
+  if (!getActivePinia()) {
+    return
+  }
+
+  try {
+    const { useAuthStore } = await import('@/stores/auth')
+    const authStore = useAuthStore()
+    authStore.clearSession()
+  } catch (error) {
+    console.error('Failed to clear auth store:', error)
+  }
+}
+
+const refreshAuthSession = async (): Promise<boolean> => {
+  if (!isRefreshTokenValid()) {
+    return false
+  }
+
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const refreshToken = getRefreshToken()
+      if (!refreshToken) {
+        return false
+      }
+
+      const response = await axios.post('/api/v1/auth/refresh', {
+        refresh_token: refreshToken,
+      })
+
+      const normalized = normalizeAuthTokenPayload(response.data)
+      if (!normalized.access_token || !normalized.refresh_token) {
+        throw new Error('Invalid refresh response')
+      }
+
+      saveAuthSession(normalized, undefined)
+      await syncAuthStoreFromStorage()
+      return true
+    })().finally(() => {
+      refreshPromise = null
+    })
+  }
+
+  return refreshPromise
+}
+
+const isAuthEndpoint = (url?: string) => Boolean(url && url.includes('/auth'))
+
 request.interceptors.request.use(
-  (config) => {
-    // 移除重复请求
+  async (config) => {
     removePendingRequest(config)
     addPendingRequest(config)
 
-    // GET请求缓存处理（排除auth和users/me等关键接口）
+    const token = getAccessToken()
+    const shouldRefresh = Boolean(token) && !isAuthEndpoint(config.url) && isAccessTokenExpiringSoon(60)
+
+    if (shouldRefresh) {
+      try {
+        await refreshAuthSession()
+      } catch (error) {
+        console.warn('Proactive refresh failed:', error)
+      }
+    }
+
+    const currentToken = getAccessToken()
     try {
-      const isAuthRequest = config.url?.includes('/auth')
       const isMeRequest = config.url?.includes('/users/me')
-      const isCacheable = config.method?.toLowerCase() === 'get' && !config.headers?.['Cache-Control'] && !isAuthRequest && !isMeRequest
-      
+      const isCacheable =
+        config.method?.toLowerCase() === 'get' &&
+        !config.headers?.['Cache-Control'] &&
+        !isAuthEndpoint(config.url) &&
+        !isMeRequest
+
       if (isCacheable) {
-        const cacheKey = generateRequestKey(config)
+        const cacheKey = generateRequestKey(config, currentToken)
         const cached = requestCache.get(cacheKey)
+
         if (cached && Date.now() - cached.timestamp < CACHE_EXPIRE_TIME) {
-          // 命中缓存，直接返回，包装成AxiosResponse格式
-          return Promise.resolve({
+          const cachedResponse = {
             data: cached.data,
             status: 200,
             statusText: 'OK',
             headers: {},
-            config
-          } as any)
+            config,
+          } as AxiosResponse
+
+          const cachedError = new Error('cached-response') as CachedResponseError
+          cachedError.__fromCache = true
+          cachedError.cachedResponse = cachedResponse
+          return Promise.reject(cachedError)
         }
       }
     } catch (error) {
       console.error('Cache check error:', error)
     }
 
-    const token = localStorage.getItem('token')
-    if (token) {
+    if (currentToken) {
       if (!config.headers) {
-        (config as any).headers = {}
+        ;(config as any).headers = {}
       }
-      (config.headers as any).Authorization = `Bearer ${token}`
+      ;(config.headers as any).Authorization = `Bearer ${currentToken}`
     }
+
     return config
   },
-  (error) => {
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error)
 )
 
 request.interceptors.response.use(
   (response) => {
-    // 请求完成，移除pending记录
     removePendingRequest(response.config)
 
-    // 缓存GET请求结果
     try {
       if (response.config.method?.toLowerCase() === 'get' && !response.config.headers?.['Cache-Control']) {
-        const cacheKey = generateRequestKey(response.config)
+        const token = getAccessToken()
+        const cacheKey = generateRequestKey(response.config, token)
         requestCache.set(cacheKey, {
           data: response.data,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         })
       }
     } catch (error) {
@@ -126,28 +220,54 @@ request.interceptors.response.use(
 
     return response
   },
-  (error) => {
-    // 请求错误，移除pending记录
+  async (error) => {
+    if (error?.__fromCache && error.cachedResponse) {
+      removePendingRequest(error.cachedResponse.config)
+      return Promise.resolve(error.cachedResponse)
+    }
+
     if (error.config) {
       removePendingRequest(error.config)
     }
 
-    // 忽略取消请求的错误
     if (axios.isCancel(error)) {
-      return Promise.reject(new Error('请求被取消'))
+      return Promise.reject(new Error('请求已取消'))
     }
 
     if (error.response) {
       if (error.response.status === 401) {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        if (!window.location.pathname.includes('/auth/login')) {
-             message.error('会话已过期，请重新登录')
-             window.location.href = '/auth/login'
+        const originalConfig = error.config as RetryableAxiosConfig | undefined
+        const canRetry = originalConfig && !originalConfig._retry && !isAuthEndpoint(originalConfig.url)
+
+        if (canRetry && isRefreshTokenValid()) {
+          originalConfig._retry = true
+          try {
+            const refreshed = await refreshAuthSession()
+            if (refreshed) {
+              const newToken = getAccessToken()
+              const retryConfig: RetryableAxiosConfig = {
+                ...originalConfig,
+                headers: {
+                  ...(originalConfig.headers || {}),
+                  Authorization: `Bearer ${newToken}`,
+                },
+              }
+              delete (retryConfig as any).cancelToken
+              delete (retryConfig as any).signal
+              return request(retryConfig)
+            }
+          } catch (refreshError) {
+            console.warn('Token refresh failed:', refreshError)
+          }
+        }
+
+        await clearAuthState()
+        message.error('会话已过期，请重新登录')
+        if (import.meta.env.MODE !== 'test' && !window.location.pathname.includes('/auth/login')) {
+          window.location.href = '/auth/login'
         }
       } else if (error.response.status >= 500) {
-        // 开发环境才打印详细错误
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
           console.error('Server Error:', JSON.stringify(error.response.data, null, 2))
         }
         message.error('服务器内部错误，请稍后重试')
@@ -157,20 +277,21 @@ request.interceptors.response.use(
         message.error(msg)
       }
     } else if (error.request) {
-        message.error('网络连接失败，请检查网络设置')
+      message.error('网络连接失败，请检查网络设置')
     } else {
-        message.error('请求配置错误')
+      message.error('请求配置错误')
     }
+
     return Promise.reject(error)
   }
 )
 
-// 手动清除缓存方法
 export const clearRequestCache = (pattern?: string) => {
   if (!pattern) {
     requestCache.clear()
     return
   }
+
   requestCache.forEach((_, key) => {
     if (key.includes(pattern)) {
       requestCache.delete(key)

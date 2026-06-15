@@ -1,0 +1,172 @@
+.register-container {
+  min-height: 100vh;
+  background-color: #f4f7f5;
+  display: flex;
+  flex-direction: column;
+  padding: 80rpx 60rpx;
+  box-sizing: border-box;
+}
+
+.header-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 80rpx;
+}
+
+.hero-image {
+  width: 240rpx;
+  height: 240rpx;
+  margin-bottom: 40rpx;
+}
+
+.main-title {
+  font-size: 44rpx;
+  font-weight: 800;
+  color: #1a1d1e;
+  margin-bottom: 16rpx;
+  line-height: 1.35;
+}
+
+.sub-title {
+  font-size: 28rpx;
+  color: #787f84;
+  line-height: 1.45;
+}
+
+.form-section {
+  width: 100%;
+  margin-bottom: 60rpx;
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  background-color: #ffffff;
+  border-radius: 28rpx;
+  padding: 0 30rpx;
+  height: 96rpx;
+  margin-bottom: 30rpx;
+  border: 2rpx solid transparent;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+
+.input-group.focused {
+  border-color: #3bb36b;
+  background-color: #ffffff;
+  box-shadow: 0 4rpx 16rpx rgba(59, 179, 107, 0.1);
+}
+
+.form-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  font-size: 30rpx;
+  color: #1a1d1e;
+}
+
+.ph-style {
+  color: #b0b0b0;
+  font-size: 28rpx;
+}
+
+.eye-icon {
+  flex: 0 0 auto;
+  min-width: 48rpx;
+  text-align: center;
+  font-size: 28rpx;
+  color: #999999;
+  padding: 10rpx;
+}
+
+.error {
+  color: #dc2626;
+  background: #fef2f2;
+  border-radius: 20rpx;
+  padding: 16rpx 22rpx;
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.action-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.btn-primary {
+  width: 100% !important;
+  background: #3bb36b;
+  color: #ffffff;
+  font-size: 32rpx;
+  font-weight: 800;
+  border-radius: 48rpx;
+  padding: 24rpx 0;
+  margin-bottom: 40rpx;
+  box-shadow: 0 8rpx 24rpx rgba(59, 179, 107, 0.26);
+  line-height: 1.35;
+}
+
+.btn-primary::after {
+  border: none;
+}
+
+.footer-link {
+  font-size: 28rpx;
+}
+
+.text-grey {
+  color: #888888;
+}
+
+.text-blue {
+  color: #2fa15c;
+  font-weight: 600;
+  margin-left: 8rpx;
+}
+
+.agreement-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 34rpx;
+}
+
+.checkbox {
+  flex: 0 0 auto;
+  width: 32rpx;
+  height: 32rpx;
+  border: 2rpx solid #cccccc;
+  border-radius: 50%;
+  margin-right: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.checkbox.checked {
+  background-color: #3bb36b;
+  border-color: #3bb36b;
+}
+
+.check-mark {
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.agreement-text {
+  flex: 0 1 auto;
+  font-size: 24rpx;
+  color: #999999;
+  line-height: 1.6;
+}
+
+.link-text {
+  color: #2fa15c;
+}

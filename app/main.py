@@ -1,128 +1,156 @@
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-import os
-from app.core.config import settings
-from app.api.v1.api import api_router
-from app.db.session import db_manager
-from app.core.responses.base import Response
-from fastapi.exceptions import RequestValidationError
-import logging
+from __future__ import annotations
 
-# Configure logging
+import logging
+import os
+import uuid
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from app.api.v1.api import api_router
+from app.core.config import settings
+from app.db.session import db_manager
+from utils import LLMServiceError
+
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# Initialize Database Schema
+
 try:
     db_manager.init_db()
-except Exception as e:
-    logger.error(f"Database initialization failed: {e}", exc_info=True)
-    # Continue to allow app to start and report error via API
+except Exception as exc:
+    logger.error("Database initialization failed: %s", exc, exc_info=True)
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
 )
 
-# Global Exception Handler
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     import traceback
-    error_msg = f"Global exception: {str(exc)}\n{traceback.format_exc()}"
-    logger.error(error_msg)
-    
-    # Return structured error response
+
+    error_id = uuid.uuid4().hex[:12]
+    logger.error("Global exception [%s]: %s\n%s", error_id, exc, traceback.format_exc())
     return JSONResponse(
         status_code=500,
         content={
             "code": 500,
-            "detail": str(exc), # Explicitly expose error detail for debugging
+            "detail": "Internal server error",
             "message": "服务器内部错误，请稍后重试",
-            "data": None
+            "error_id": error_id,
+            "data": None,
         },
     )
+
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "code": exc.status_code, 
-            "detail": exc.detail, 
+            "code": exc.status_code,
+            "detail": exc.detail,
             "message": exc.detail,
-            "data": None
+            "data": None,
         },
     )
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.warning(f"Validation error: {exc.errors()}")
+    logger.warning("Validation error: %s", exc.errors())
     return JSONResponse(
         status_code=400,
         content={
             "code": 400,
             "detail": exc.errors(),
             "message": "请求参数验证失败",
-            "data": None
+            "data": None,
         },
     )
 
-# Set all CORS enabled origins
+
+@app.exception_handler(LLMServiceError)
+async def llm_service_exception_handler(request: Request, exc: LLMServiceError):
+    logger.error("LLM service error on %s (%s): %s", request.url.path, exc.kind, exc.details or exc.message)
+
+    if request.url.path.startswith(f"{settings.API_V1_STR}/agents/chat"):
+        return JSONResponse(
+            status_code=200,
+            content={
+                "content": f"抱歉，时空之门当前无法调用大模型服务：{exc.message}",
+                "thought": None,
+            },
+        )
+
+    return JSONResponse(
+        status_code=503,
+        content={
+            "code": 503,
+            "detail": exc.message,
+            "message": exc.message,
+            "data": None,
+        },
+    )
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "Cache-Control"],
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-# Define root directory
 base_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(base_dir)
 
-# Serve Uploaded Files
 uploads_dir = os.path.join(root_dir, "uploads")
 os.makedirs(uploads_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
-# Serve Frontend Static Files
 frontend_dist = os.path.join(root_dir, "frontend", "dist")
-
 if not os.path.exists(frontend_dist):
-    # Try alternate location if running locally not in docker
     frontend_dist = os.path.join(root_dir, "..", "frontend", "dist")
 
-logger.info(f"Frontend dist path: {frontend_dist}, exists: {os.path.exists(frontend_dist)}")
+logger.info("Frontend dist path: %s, exists: %s", frontend_dist, os.path.exists(frontend_dist))
 
 if os.path.exists(frontend_dist):
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
-    
-    # Catch-all for SPA routing
+    legacy_assets_dir = os.path.join(frontend_dist, "assets")
+    modern_assets_dir = os.path.join(frontend_dist, "static")
+
+    if os.path.exists(legacy_assets_dir):
+        app.mount("/assets", StaticFiles(directory=legacy_assets_dir), name="assets")
+
+    if os.path.exists(modern_assets_dir):
+        app.mount("/static", StaticFiles(directory=modern_assets_dir), name="static")
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        # API requests are handled by router above (order matters? No, this is catch-all)
-        # But include_router is already added.
         if full_path.startswith("api"):
-             return JSONResponse(status_code=404, content={"detail": "API endpoint not found"})
-        
-        # Check if file exists (e.g. favicon.ico)
+            return JSONResponse(status_code=404, content={"detail": "API endpoint not found"})
+
         file_path = os.path.join(frontend_dist, full_path)
         if os.path.exists(file_path) and os.path.isfile(file_path):
             return FileResponse(file_path)
-            
-        # Fallback to index.html for client-side routing
+
         index_path = os.path.join(frontend_dist, "index.html")
         if os.path.exists(index_path):
             return FileResponse(index_path)
-            
+
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
 
 @app.get("/")
 def root():
@@ -131,6 +159,8 @@ def root():
         return FileResponse(index_path)
     return {"message": "Welcome to MADF API. Frontend not found.", "docs": "/docs"}
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

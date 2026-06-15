@@ -5,10 +5,12 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - ENVIRONMENT=production
       - DATABASE_URL=file:/app/data/madf.db
       - REDIS_URL=redis://localhost:6379/0
       - PYTHONPATH=/app
-      - API_KEY=${API_KEY}
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY before starting production}
+      - API_KEY=${API_KEY:?Set API_KEY before starting production}
       - MODEL_NAME=${MODEL_NAME:-glm-4.5}
       - BASE_URL=${BASE_URL:-https://open.bigmodel.cn/api/paas/v4/}
     volumes:

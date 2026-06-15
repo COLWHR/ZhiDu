@@ -1,0 +1,92 @@
+<view class="container">
+  <view class="header-banner">
+    <view class="tag-badge">女娲智能体</view>
+    <view class="main-title">极简指令，创造专属智能体</view>
+    <view class="sub-title">只需描述角色需求，专长领域或研究主题，女娲将为您抽象构建并自动存入工坊。</view>
+
+    <view class="stats-row">
+      <view class="stat-box">
+        <text class="stat-num">{{generatedPersonas.length}}</text>
+        <text class="stat-label">已生成</text>
+      </view>
+      <view class="stat-box">
+        <text class="stat-num">{{plannedCount || currentCount || 0}}</text>
+        <text class="stat-label">计划数量</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section-card prompt-card">
+    <view class="section-title">描述你要生成的智能体</view>
+
+    <view class="input-area">
+      <textarea
+        class="agent-textarea"
+        value="{{draft}}"
+        placeholder="例如：生成一个擅长商业分析、产品判断和数据洞察的智能体"
+        placeholder-class="ph-style"
+        maxlength="-1"
+        bindinput="onDraftInput"
+      />
+    </view>
+
+    <view class="tags-group">
+      <view
+        class="tag-item"
+        wx:for="{{examples}}"
+        wx:key="label"
+        data-prompt="{{item.prompt}}"
+        bindtap="useExample"
+      >
+        {{item.label}}
+      </view>
+    </view>
+
+    <view class="btn-row">
+      <button class="btn-main" loading="{{loading}}" bindtap="generate">开始生成</button>
+      <view class="btn-sub" bindtap="clearDraft">清空</view>
+    </view>
+  </view>
+
+  <view class="section-card process-card">
+    <view class="section-title">生成过程 <text class="loading-dot"></text></view>
+
+    <view class="log-box">
+      <view class="log-header">
+        <view class="avatar-icon"><text class="icon-txt">🤖</text></view>
+        <text class="avatar-name">女娲</text>
+      </view>
+      <view class="log-content">
+        <block wx:if="{{conversation.length}}">
+          <view class="log-line" wx:for="{{conversation}}" wx:key="id">{{item.role === 'user' ? '你：' : '女娲：'}}{{item.content}}</view>
+        </block>
+        <block wx:else>
+          我是女娲智能体。你可以直接描述你想要的智能体画像，我会为你生成并自动保存到智能体工坊。
+        </block>
+      </view>
+    </view>
+
+    <view wx:if="{{statusText}}" class="status-inline">{{statusText}}</view>
+    <view class="log-footer-hint">女娲会把生成结果自动写入智能体工坊，完成后在这里查看。</view>
+  </view>
+
+  <view wx:if="{{generatedPersonas.length}}" class="section-card">
+    <view class="section-title">已生成智能体</view>
+    <view class="persona-list">
+      <view class="persona-item" wx:for="{{generatedPersonas}}" wx:key="id">
+        <view class="persona-head">
+          <view>
+            <view class="persona-name">{{item.name}}</view>
+            <view class="persona-title">{{item.title || '暂无头衔'}}</view>
+          </view>
+          <view class="saved-tag">已保存</view>
+        </view>
+        <view class="persona-bio">{{item.bio || '暂无简介'}}</view>
+        <view class="tag-row">
+          <view class="saved-chip" wx:for="{{item.theories}}" wx:key="*this">{{item}}</view>
+        </view>
+      </view>
+    </view>
+    <button class="btn-main bottom-btn" bindtap="goPersonas">前往智能体工坊</button>
+  </view>
+</view>

@@ -1,3 +1,5 @@
+import pytest
+
 def test_create_persona_user_not_found(client):
     # Register and get token
     u = client.post("/api/v1/auth/register", json={"username": "err_user1", "password": "p", "role": "u"}).json()
@@ -7,7 +9,7 @@ def test_create_persona_user_not_found(client):
     response = client.post(
         "/api/v1/personas/",
         params={"owner_id": 999},
-        json={"name": "P", "bio": "B", "theories": [], "is_public": True},
+        json={"name": "P", "bio": "B", "theories": [], "is_public": False},
         headers=headers
     )
     # The current implementation might just use current_user.id instead of owner_id param
@@ -28,14 +30,21 @@ def test_create_forum_creator_not_found(client):
     assert response.status_code in [200, 404]
 
 def test_get_forum_not_found(client):
-    response = client.get("/api/v1/forums/999/messages")
+    client.post("/api/v1/auth/register", json={"username": "not_found_user", "password": "p", "role": "u"})
+    token = client.post("/api/v1/auth/login", data={"username": "not_found_user", "password": "p"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get("/api/v1/forums/999/messages", headers=headers)
     assert response.status_code == 404
     assert "Forum not found" in response.json()["detail"]
 
 def test_post_message_forum_not_found(client):
+    client.post("/api/v1/auth/register", json={"username": "msg_not_found_user", "password": "p", "role": "u"})
+    token = client.post("/api/v1/auth/login", data={"username": "msg_not_found_user", "password": "p"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
     response = client.post(
         "/api/v1/forums/999/messages",
-        json={"forum_id": 999, "persona_id": 1, "speaker_name": "S", "content": "C", "turn_count": 1}
+        json={"forum_id": 999, "persona_id": 1, "speaker_name": "S", "content": "C", "turn_count": 1},
+        headers=headers
     )
     assert response.status_code == 404
     assert "Forum not found" in response.json()["detail"]
@@ -70,3 +79,114 @@ def test_chat_agent_invalid_initialization(client):
         )
         assert response.status_code == 400
         assert "Failed to initialize agent" in response.json()["detail"]
+
+
+def test_chat_agent_stream_falls_back_when_llm_unavailable(client):
+    from unittest.mock import patch
+    from utils import LLMServiceError
+
+    payload = {
+        "agent_name": "TestAgent",
+        "persona_json": {
+            "name": "TestAgent",
+            "system_prompt": "你是一个乐于回答问题的助手",
+            "bio": "测试助手",
+            "title": "助手",
+            "theories": [],
+            "stance": "中立"
+        },
+        "context_messages": [
+            {"speaker": "用户", "content": "为什么时空之门回答不了问题？"},
+            {"speaker": "TestAgent", "content": "我在倾听。"}
+        ],
+        "theme": "自由对话"
+    }
+
+    with patch(
+        "app.api.v1.endpoints.agents.get_chat_completion",
+        side_effect=LLMServiceError(
+            kind="auth",
+            message="上游模型鉴权失败（401 Unauthorized / 身份验证失败）",
+            status_code=401,
+        ),
+    ):
+        response = client.post("/api/v1/agents/chat/stream", json=payload)
+
+    assert response.status_code == 200
+    body = response.text
+    assert "上游模型鉴权失败" in body
+    assert "API_KEY" in body
+
+
+def test_chat_completion_rejects_placeholder_api_key(monkeypatch):
+    import utils
+    from utils import LLMServiceError
+
+    monkeypatch.setattr(utils.settings, "API_KEY", "replace_with_your_zhipu_api_key", raising=False)
+
+    with pytest.raises(LLMServiceError) as exc_info:
+        utils.get_chat_completion(
+            [{"role": "user", "content": "hello"}],
+            raise_error=True,
+        )
+
+    assert exc_info.value.kind == "auth"
+    assert "占位" in exc_info.value.message or "示例" in exc_info.value.message
+
+
+def test_chat_agent_direct_endpoint_uses_llm_fallback(client):
+    from unittest.mock import patch
+    from utils import LLMServiceError
+
+    payload = {
+        "agent_name": "TestAgent",
+        "persona_json": {
+            "name": "TestAgent",
+            "system_prompt": "你是一个乐于回答问题的助手",
+            "bio": "测试助手",
+            "title": "助手",
+            "theories": [],
+            "stance": "中立",
+        },
+        "context_messages": [
+            {"speaker": "用户", "content": "为什么时空之门回答不了问题？"},
+        ],
+        "theme": "自由对话"
+    }
+
+    with patch(
+        "app.api.v1.endpoints.agents.ParticipantAgent.think",
+        side_effect=LLMServiceError(
+            kind="auth",
+            message="API_KEY 仍是示例占位符，请替换为真实密钥后再试。",
+            status_code=401,
+        ),
+    ):
+        response = client.post("/api/v1/agents/chat", json=payload)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "API_KEY" in data["content"]
+    assert data["thought"] is None
+
+
+def test_chat_history_accepts_integer_timestamp(client):
+    from unittest.mock import patch
+    from types import SimpleNamespace
+
+    client.post("/api/v1/auth/register", json={"username": "history_user", "password": "p", "role": "u"})
+    token = client.post("/api/v1/auth/login", data={"username": "history_user", "password": "p"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    history_rows = [
+        SimpleNamespace(role="user", content="你好", created_at=1710000000000),
+        SimpleNamespace(role="assistant", content="你好，我在。", created_at=1710000000123),
+    ]
+
+    with patch("app.api.v1.endpoints.agents.get_chat_history", return_value=history_rows):
+        response = client.get("/api/v1/agents/chat/history/1", headers=headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["timestamp"] == 1710000000000
+    assert data[1]["timestamp"] == 1710000000123

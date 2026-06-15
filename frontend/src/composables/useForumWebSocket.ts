@@ -1,4 +1,4 @@
-import { computed, onUnmounted } from 'vue'
+import { computed } from 'vue'
 import { useForumStore } from '@/stores/forum'
 
 export function useForumWebSocket(forumId: number) {

@@ -65,17 +65,8 @@ def test_coverage_forums_edge_cases(client, auth_header):
     client.delete(f"/api/v1/forums/{f['id']}", headers=auth_header)
 
 def test_coverage_god_detailed(client, auth_header):
-    # LLM parse fail (hits 33)
-    # Mock god.get_persona_count to fail or return 0
-    from app.api.v1.endpoints.god import god
-    original_count = god.get_persona_count
-    god.get_persona_count = lambda *args, **kwargs: 0
-    try:
-        client.post("/api/v1/god/generate", json={"prompt": "test"}, headers=auth_header)
-    finally:
-        god.get_persona_count = original_count
-
-    # Just hit the generator entry point, but don't stream for too long to avoid hangs
+    # Exercise both the compatibility endpoint and the streaming generator entry point.
+    client.post("/api/v1/god/generate", json={"prompt": "test"}, headers=auth_header)
     client.post("/api/v1/god/generate_real", json={"prompt": "Short", "n": 1}, headers=auth_header)
 
 def test_coverage_personas_detailed(client, auth_header):

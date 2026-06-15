@@ -25,7 +25,8 @@ class TestRobustnessTimeout(unittest.IsolatedAsyncioTestCase):
         agent.speak = MagicMock(return_value=None)
         
         # Mock dependencies
-        with patch('app.services.forum_scheduler.create_message') as mock_create_msg, \
+        with patch('app.services.forum_scheduler.get_forum_participants', return_value=[]), \
+             patch('app.services.forum_scheduler.create_message') as mock_create_msg, \
              patch('app.services.forum_scheduler.manager.broadcast', new_callable=AsyncMock) as mock_broadcast, \
              patch('app.services.forum_scheduler.ForumScheduler._broadcast_system_log', new_callable=AsyncMock) as mock_log, \
              patch('app.services.forum_scheduler.update_forum_participant') as mock_update_p:
@@ -36,7 +37,7 @@ class TestRobustnessTimeout(unittest.IsolatedAsyncioTestCase):
             # It's easier to mock to_thread to return agent.speak()
             
             with patch('asyncio.to_thread', side_effect=lambda func, *args: func(*args)):
-                await scheduler._agent_speak(mock_db, forum_id, agent, {}, "context")
+                await scheduler._agent_speak(forum_id, agent, {}, "context")
             
             # Verify:
             # It should handle None generator by logging warning and setting content to "(沉默)"
@@ -69,11 +70,15 @@ class TestRobustnessTimeout(unittest.IsolatedAsyncioTestCase):
              patch('app.services.forum_scheduler.ForumScheduler._broadcast_system_log', new_callable=AsyncMock), \
              patch('app.services.forum_scheduler.update_forum') as mock_update_f:
             
-            mock_get_forum.return_value.moderator_id = 999
+            mock_forum = MagicMock()
+            mock_forum.moderator_id = 999
+            mock_forum.topic = "test"
+            mock_forum.summary_history = []
+            mock_get_forum.return_value = mock_forum
             
             with patch('asyncio.to_thread', side_effect=lambda func, *args: func(*args)):
                 # Run
-                await scheduler._moderator_speak(mock_db, forum_id, mock_mod, "opening", [])
+                await scheduler._moderator_speak(forum_id, mock_mod, "opening", [])
             
             # In our implementation for moderator:
             # if gen is None: logger.warning...
@@ -103,13 +108,14 @@ class TestRobustnessTimeout(unittest.IsolatedAsyncioTestCase):
             
         agent.speak = MagicMock(return_value=faulty_generator())
         
-        with patch('app.services.forum_scheduler.create_message') as mock_create_msg, \
+        with patch('app.services.forum_scheduler.get_forum_participants', return_value=[]), \
+             patch('app.services.forum_scheduler.create_message') as mock_create_msg, \
              patch('app.services.forum_scheduler.manager.broadcast', new_callable=AsyncMock), \
              patch('app.services.forum_scheduler.ForumScheduler._broadcast_system_log', new_callable=AsyncMock), \
              patch('app.services.forum_scheduler.update_forum_participant'), \
              patch('asyncio.to_thread', side_effect=lambda func, *args: func(*args)):
              
-            await scheduler._agent_speak(mock_db, forum_id, agent, {}, "context")
+            await scheduler._agent_speak(forum_id, agent, {}, "context")
             
             # It should catch the exception inside the loop and proceed with partial content
             mock_create_msg.assert_called_once()

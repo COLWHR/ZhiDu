@@ -1,0 +1,20 @@
+<view class="legal-page">
+  <view class="legal-card">
+    <view class="hero">
+      <text class="legal-title">{{title}}</text>
+      <text class="legal-subtitle">{{subtitle}}</text>
+    </view>
+
+    <view class="section" wx:for="{{sections}}" wx:key="title" wx:for-item="section">
+      <text class="section-title">{{section.title}}</text>
+      <view class="section-body">
+        <view class="section-item" wx:for="{{section.items}}" wx:key="*this" wx:for-item="point">
+          <text class="bullet">•</text>
+          <text class="point-text">{{point}}</text>
+        </view>
+      </view>
+    </view>
+
+    <button class="back-btn" bindtap="goBack">返回</button>
+  </view>
+</view>

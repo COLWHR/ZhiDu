@@ -20,6 +20,14 @@
             >
                 <play-circle-outlined /> 开始论坛
             </a-button>
+            <a-button
+                v-if="forumStore.currentForum?.status === 'running'"
+                danger
+                @click="handleStop"
+                :loading="stopping"
+            >
+                <pause-circle-outlined /> 停止论坛
+            </a-button>
             <a-button @click="showParticipantModal">
               <team-outlined /> 查看参与者
             </a-button>
@@ -136,12 +144,13 @@ const authStore = useAuthStore()
 const router = useRouter()
 
 const starting = ref(false)
+const stopping = ref(false)
 const sendingUserMessage = ref(false)
 const userMessage = ref('')
 const isParticipantModalVisible = ref(false)
 const isSystemLogModalVisible = ref(false)
 const forumId = Number(route.params.id)
-const { connect, disconnect, isConnected } = useForumWebSocket(forumId)
+const { connect, isConnected } = useForumWebSocket(forumId)
 
 const handleUserSend = async () => {
     if (!userMessage.value.trim()) return
@@ -168,7 +177,7 @@ const handleFileUpload = async (file: File) => {
     
     try {
         // Upload file to backend
-        const response = await request.post('/upload', formData, {
+        const response = await request.post('/upload/image', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
             }
@@ -230,7 +239,7 @@ onMounted(async () => {
     }
     
     // 3. Background: Load participant info context (non-blocking)
-    personaStore.fetchPersonas(authStore.user?.id).catch(e => console.warn('Persona fetch failed', e))
+    void Promise.resolve(personaStore.fetchPersonas(authStore.user?.id)).catch(e => console.warn('Persona fetch failed', e))
     
     // 4. Background: Connect WS (non-blocking)
     // IMPORTANT: Check if WS is already connected for THIS forum
@@ -293,10 +302,13 @@ const handleStart = async () => {
 
 const handleStop = async () => {
     if (!forumStore.currentForum) return
+    stopping.value = true
     try {
         await forumStore.stopForum(forumId)
     } catch (e) {
         console.error('Stop failed', e)
+    } finally {
+        stopping.value = false
     }
 }
 </script>

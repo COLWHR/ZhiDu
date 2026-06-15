@@ -65,7 +65,7 @@ def test_create_forum_invalid_moderator_returns_404(client):
             "theories": ["X"],
             "stance": "S",
             "system_prompt": "SP",
-            "is_public": True
+            "is_public": False
         }
     )
     assert persona_res.status_code == 200
@@ -95,7 +95,7 @@ def test_create_forum_with_duplicate_participants_succeeds(client):
             "theories": ["X"],
             "stance": "S",
             "system_prompt": "SP",
-            "is_public": True
+            "is_public": False
         }
     )
     assert persona_res.status_code == 200

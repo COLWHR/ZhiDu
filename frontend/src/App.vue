@@ -16,9 +16,10 @@ const configStore = useConfigStore()
 
 <style>
 html, body, #app, .app-container {
-  height: 100%;
+  min-height: 100%;
   margin: 0;
   padding: 0;
-  overflow: hidden; /* Prevent global scrollbar */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 </style>

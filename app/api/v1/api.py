@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import users, personas, forums, agents, auth, god, moderators, uploads
+from app.api.v1.endpoints import users, personas, forums, agents, auth, god, moderators, uploads, duxin
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -10,3 +10,4 @@ api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(god.router, prefix="/god", tags=["god"])
 api_router.include_router(moderators.router, prefix="/moderators", tags=["moderators"])
 api_router.include_router(uploads.router, tags=["uploads"])
+api_router.include_router(duxin.router, prefix="/duxin", tags=["duxin"])

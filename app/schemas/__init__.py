@@ -19,7 +19,10 @@ class UserResponse(UserBase):
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
+    access_token_expires_at: datetime
+    refresh_token_expires_at: datetime
 
 class TokenData(BaseModel):
     username: Optional[str] = None
@@ -95,6 +98,26 @@ class ModeratorResponse(ModeratorBase):
     model_config = ConfigDict(from_attributes=True)
 
 from .system_log import SystemLogCreate, SystemLogResponse
+from .duxin import (
+    DuxinFeedbackRating,
+    DuxinMemoryCreate,
+    DuxinMemoryResponse,
+    DuxinMemorySummaryItem,
+    DuxinMemorySummaryResponse,
+    DuxinMemoryType,
+    DuxinMemoryUpdate,
+    DuxinMode,
+    DuxinMessageCreate,
+    DuxinMessageResponse,
+    DuxinRiskAssessment,
+    DuxinRiskLevel,
+    DuxinSafetyFeedbackCreate,
+    DuxinSafetyFeedbackResponse,
+    DuxinSafetyFeedbackStats,
+    DuxinSessionCreate,
+    DuxinSessionResponse,
+    DuxinStreamRequest,
+)
 
 # --- Forum Schemas ---
 class ForumBase(BaseModel):

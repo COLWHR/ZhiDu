@@ -122,4 +122,73 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE
 );
 
+-- Duxin Sessions table
+CREATE TABLE IF NOT EXISTS duxin_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    mode TEXT NOT NULL DEFAULT 'support',
+    risk_level TEXT NOT NULL DEFAULT 'L0',
+    status TEXT NOT NULL DEFAULT 'active',
+    summary TEXT,
+    latest_message_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Duxin Messages table
+CREATE TABLE IF NOT EXISTS duxin_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    agent_name TEXT,
+    content TEXT NOT NULL,
+    risk_level TEXT NOT NULL DEFAULT 'L0',
+    metadata TEXT DEFAULT '{}',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES duxin_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Duxin Memories table
+CREATE TABLE IF NOT EXISTS duxin_memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    memory_type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    source_session_id INTEGER,
+    user_editable BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (source_session_id) REFERENCES duxin_sessions(id) ON DELETE SET NULL
+);
+
+-- Duxin Risk Events table
+CREATE TABLE IF NOT EXISTS duxin_risk_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    session_id INTEGER NOT NULL,
+    risk_level TEXT NOT NULL,
+    signals TEXT DEFAULT '[]',
+    action_taken TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES duxin_sessions(id) ON DELETE CASCADE
+);
+
+-- Duxin Safety Feedback table
+CREATE TABLE IF NOT EXISTS duxin_safety_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    session_id INTEGER,
+    rating TEXT NOT NULL,
+    content TEXT,
+    risk_level TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES duxin_sessions(id) ON DELETE SET NULL
+);
+
 

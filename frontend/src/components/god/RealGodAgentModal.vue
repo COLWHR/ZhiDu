@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <a-modal
     v-model:open="visible"
-    title="女娲（智能创建）"
+    title="智能体生成助手"
     width="1000px"
     :footer="null"
     @cancel="handleCancel"
@@ -40,7 +40,7 @@
                  <!-- 2. Search Intent (Thought) -->
                  <div v-else-if="item.type === 'thought'" class="bubble thought-bubble">
                    <div class="thought-header">
-                     <span class="icon">🤔</span> 思考过程
+                      <span class="icon">💭</span> 思考过程
                    </div>
                    <div class="thought-content">{{ item.content }}</div>
                  </div>
@@ -48,16 +48,16 @@
                  <!-- 3. Searching State -->
                  <div v-else-if="item.type === 'search'" class="search-block">
                    <div class="search-status">
-                     <span v-if="item.status === 'loading'" class="icon loading">⏳</span>
-                     <span v-else class="icon success">✅</span>
+                      <span v-if="item.status === 'loading'" class="icon loading">🔍</span>
+                      <span v-else class="icon success">✓</span>
                      <span class="status-text">
-                       {{ item.status === 'loading' ? '正在搜索' : '搜索完成' }}: 
+                        {{ item.status === 'loading' ? '正在搜索' : '搜索完成' }}: 
                        <span class="query">{{ item.query }}</span>
                      </span>
                    </div>
                    <div v-if="item.status === 'done' && item.result" class="search-result">
                      <a-collapse ghost size="small">
-                        <a-collapse-panel key="1" header="查看搜索结果">
+                         <a-collapse-panel key="1" header="查看搜索结果">
                           <pre>{{ item.result }}</pre>
                         </a-collapse-panel>
                      </a-collapse>
@@ -87,7 +87,7 @@
                  <!-- 6. Status/Progress -->
                  <div v-else-if="item.type === 'status'" class="status-block">
                    <div class="status-content">
-                     <span class="icon">🚀</span> 
+                     <span class="icon">⏳</span> 
                      <span class="status-text">{{ item.content }}</span>
                    </div>
                  </div>
@@ -107,7 +107,7 @@
           </div>
           <div class="content-wrapper">
             <div class="bubble loading">
-              <a-spin size="small" /> 正在呼唤女娲...
+              <a-spin size="small" /> 正在调用助手...
             </div>
           </div>
         </div>
@@ -116,7 +116,7 @@
       <div class="input-area">
         <a-textarea
           v-model:value="input"
-          placeholder="描述您想要创建的真实人物... (Enter 发送, Shift+Enter 换行)"
+          placeholder="描述您想要创建的智能体... (Enter 发送，Shift+Enter 换行)"
           :auto-size="{ minRows: 2, maxRows: 4 }"
           @keydown.enter.exact.prevent="handleSend"
           @keydown.ctrl.enter.prevent="handleSend"
@@ -135,7 +135,7 @@
 <script setup lang="ts">
 import { ref, nextTick, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { usePersonaStore } from '@/stores/persona'
 import { SendOutlined } from '@ant-design/icons-vue'
 
@@ -152,9 +152,17 @@ interface MessageItem {
 
 interface ChatMessage {
   role: 'user' | 'assistant'
-  content?: string // For user messages or simple assistant messages
-  items?: MessageItem[] // For structured assistant messages
+  content?: string
+  items?: MessageItem[]
   timestamp: number
+}
+
+type StreamEvent = {
+  type?: string
+  content?: unknown
+  current?: number
+  total?: number
+  [key: string]: unknown
 }
 
 const props = defineProps<{
@@ -184,219 +192,175 @@ const scrollToBottom = () => {
   })
 }
 
+const ensureWelcomeMessage = () => {
+  if (messages.value.length === 0) {
+    messages.value.push({
+      role: 'assistant',
+      content: '',
+      items: [
+        {
+          type: 'text',
+          content: '我是智能体生成助手。你可以描述一个人设、职业方向或研究主题，我会帮你生成可保存的智能体角色。'
+        }
+      ],
+      timestamp: Date.now()
+    })
+  }
+}
+
+const appendStatus = (items: MessageItem[], content: string) => {
+  const lastStatus = [...items].reverse().find(i => i.type === 'status')
+  if (lastStatus) {
+    lastStatus.content = content
+  } else {
+    items.push({ type: 'status', content })
+  }
+}
+
+const appendThought = (items: MessageItem[], content: string) => {
+  const lastItem = items[items.length - 1]
+  if (lastItem && lastItem.type === 'thought') {
+    lastItem.content = (lastItem.content || '') + content
+  } else {
+    items.push({ type: 'thought', content })
+  }
+}
+
 watch(() => props.open, (val) => {
   if (val) {
-    if (messages.value.length === 0) {
-      messages.value.push({
-        role: 'assistant',
-        content: '',
-        items: [{ type: 'text', content: '我是女娲智能体，您的智能助手。我可以根据您的描述，为您创建基于真实背景的深度角色。' }],
-        timestamp: Date.now()
-      })
-    }
+    ensureWelcomeMessage()
     scrollToBottom()
   }
 })
 
 watch(() => messages.value.length, scrollToBottom)
-// Deep watch for items updates
 watch(() => messages.value[messages.value.length - 1]?.items, scrollToBottom, { deep: true })
 
 const handleSend = async () => {
   if (!input.value.trim() || loading.value) return
-  
-  // 检查渡币数量
-  const coins = parseInt(localStorage.getItem('coins') || '0')
-  const COST_PER_ROLE = 30
-  
-  if (coins < COST_PER_ROLE) {
-    message.error('渡币不足，创建角色需要30渡币')
-    return
-  }
-  
-  // 弹出确认窗口
-  Modal.confirm({
-    title: '消耗渡币确认',
-    content: `创建每个角色需要消耗 ${COST_PER_ROLE} 渡币，是否继续？`,
-    okText: '同意',
-    cancelText: '取消',
-    onOk: () => {
-      // 立即执行同步操作，让窗口快速关闭
-      const prompt = input.value
-      input.value = ''
-      
-      // 扣除渡币
-      const newCoins = coins - COST_PER_ROLE
-      localStorage.setItem('coins', newCoins.toString())
-      message.success(`已扣除 ${COST_PER_ROLE} 渡币，剩余 ${newCoins} 渡币`)
-      
-      // Add user message
-      messages.value.push({
-        role: 'user',
-        content: prompt,
-        timestamp: Date.now()
-      })
-      
-      loading.value = true
-      totalToGenerate.value = 1 // Reset
-      
-      // Prepare assistant message container
-      const assistantMsg = ref<ChatMessage>({
-        role: 'assistant',
-        items: [],
-        timestamp: Date.now()
-      })
-      messages.value.push(assistantMsg.value);
-      
-      // 异步执行网络请求，不阻塞窗口关闭
-      (async () => {
-        try {
-          // Fetch SSE
-          const response = await fetch('/api/v1/god/generate_real', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-            },
-            body: JSON.stringify({ prompt, n: 1 })
-          })
 
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`)
-          }
+  const prompt = input.value
+  input.value = ''
 
-          const reader = response.body?.getReader()
-          const decoder = new TextDecoder()
-          
-          if (!reader) throw new Error('No reader')
-
-          let buffer = ''
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            
-            buffer += decoder.decode(value, { stream: true })
-            
-            const parts = buffer.split('\n\n')
-            buffer = parts.pop() || ''
-            
-            for (const line of parts) {
-              if (line.trim().startsWith('data: ')) {
-                try {
-                  const jsonStr = line.trim().slice(6)
-                  if (!jsonStr) continue
-                  
-                  const event = JSON.parse(jsonStr)
-                  const items = assistantMsg.value.items || []
-                  
-                  if (event.type === 'count') {
-                    totalToGenerate.value = event.content
-                  } else if (event.type === 'thought_start') {
-                    // High level status update
-                    items.push({ type: 'status', content: event.content })
-                  } else if (event.type === 'progress') {
-                    // Update total and find the last status item to update
-                    if (event.total) totalToGenerate.value = event.total
-                    
-                    // Find last status item
-                    const lastStatus = [...items].reverse().find(i => i.type === 'status')
-                    if (lastStatus) {
-                      lastStatus.content = `=== 开始生成第 ${event.current} 位角色 (共 ${event.total} 位) ===`
-                    }
-                  } else if (event.type === 'thought_chunk') {
-                    // Find active thought item or create one
-                    let lastItem = items[items.length - 1]
-                    
-                    // Skip creating thought item if the last item is status (which happens at start)
-                    // But we need to put thoughts SOMEWHERE.
-                    // If last item is status, create a thought item.
-                    if (!lastItem || lastItem.type !== 'thought') {
-                      lastItem = { type: 'thought', content: '' }
-                      items.push(lastItem)
-                    }
-                    lastItem.content += event.content
-                  } else if (event.type === 'thought') {
-                    // Finalized thought (cleaned up)
-                    // Update the last thought item if exists
-                    let lastItem = items[items.length - 1]
-                    if (lastItem && lastItem.type === 'thought') {
-                      lastItem.content = event.content
-                    } else {
-                      items.push({ type: 'thought', content: event.content })
-                    }
-                  } else if (event.type === 'action') {
-                    // e.g. "搜索: keyword"
-                    const content = event.content
-                    if (content.includes('搜索') || content.includes('Search')) {
-                      // Extract query roughly
-                      const query = content.replace(/搜索[:：]|Search\[|\]/g, '').trim()
-                      items.push({ type: 'search', query: query, status: 'loading', result: '' })
-                    } else {
-                      // Other actions (like Finish) - maybe log as text?
-                      // Usually Finish is handled by result event, but the Action: Finish log exists.
-                      // We can ignore Finish action log or show as text.
-                      // Let's show as debug/text if not search
-                      // items.push({ type: 'text', content: `[Action] ${content}` })
-                    }
-                  } else if (event.type === 'observation') {
-                    // Update last search item
-                    // Find the last search item that is loading
-                    // Reverse search
-                    let searchItem = [...items].reverse().find(i => i.type === 'search' && i.status === 'loading')
-                    if (searchItem) {
-                      searchItem.status = 'done'
-                      // Fix: Clean up observation content if it contains raw JSON string artifacts
-                      let cleanContent = event.content;
-                      // Check if content looks like a JSON string dump (starts with " and ends with ")
-                      // and try to parse it if it's double encoded
-                      if (typeof cleanContent === 'string') {
-                        // Remove potential surrounding quotes and unescape
-                        // But simple approach: just display it. Pre tag handles formatting.
-                        // If user complains about specific artifacts like "[ \n " \n ", handle them:
-                        if (cleanContent.startsWith('[\n "') || cleanContent.startsWith('["')) {
-                          try {
-                            const parsed = JSON.parse(cleanContent);
-                            if (Array.isArray(parsed)) {
-                              cleanContent = parsed.join('\n');
-                            }
-                          } catch (e) {
-                            // ignore
-                          }
-                        }
-                      }
-                      searchItem.result = cleanContent
-                    } else {
-                      // Fallback
-                      items.push({ type: 'text', content: `[Observation] ${event.content}` })
-                    }
-                  } else if (event.type === 'result') {
-                    // Persona(s) generated
-                    const results = Array.isArray(event.content) ? event.content : [event.content]
-                    for (const p of results) {
-                      items.push({ type: 'persona', persona: p })
-                    }
-                    items.push({ type: 'text', content: `✅ 生成完成！` })
-                  } else if (event.type === 'error') {
-                    items.push({ type: 'error', content: event.content })
-                    message.error('生成过程中发生错误')
-                  }
-                  
-                  scrollToBottom()
-                } catch (e) {
-                  console.error('JSON parse error', e)
-                }
-              }
-            }
-          }
-
-        } catch (error: any) {
-          assistantMsg.value.items?.push({ type: 'error', content: error.message || '网络请求失败' })
-        } finally {
-          loading.value = false
-        }
-      })()
-    }
+  messages.value.push({
+    role: 'user',
+    content: prompt,
+    timestamp: Date.now()
   })
+
+  loading.value = true
+  totalToGenerate.value = 1
+
+  const assistantMsg: ChatMessage = {
+    role: 'assistant',
+    items: [],
+    timestamp: Date.now()
+  }
+  messages.value.push(assistantMsg)
+
+  try {
+    const response = await fetch('/api/v1/god/generate_real', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+      },
+      body: JSON.stringify({ prompt, n: 1 })
+    })
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(detail || `HTTP error! status: ${response.status}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('No reader')
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+    const items = assistantMsg.items ?? (assistantMsg.items = [])
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() || ''
+
+      for (const part of parts) {
+        const line = part.trim()
+        if (!line.startsWith('data: ')) continue
+
+        const jsonStr = line.slice(6).trim()
+        if (!jsonStr || jsonStr === '[DONE]') continue
+
+        let event: StreamEvent
+        try {
+          event = JSON.parse(jsonStr)
+        } catch (e) {
+          console.error('JSON parse error', e)
+          continue
+        }
+
+        const eventType = event.type || 'text'
+        const content = event.content
+
+        if (eventType === 'count') {
+          totalToGenerate.value = Number(content) || totalToGenerate.value
+        } else if (eventType === 'progress') {
+          if (typeof event.total === 'number') totalToGenerate.value = event.total
+          appendStatus(items, `正在生成第 ${event.current ?? '?'} 个，进度 ${event.current ?? '?'} / ${event.total ?? '?'}`)
+        } else if (eventType === 'status' || eventType === 'thought_start') {
+          appendStatus(items, typeof content === 'string' ? content : '正在处理...')
+        } else if (eventType === 'thought' || eventType === 'thought_chunk') {
+          if (typeof content === 'string' && content.trim()) {
+            appendThought(items, content)
+          }
+        } else if (eventType === 'action') {
+          const text = typeof content === 'string' ? content : ''
+          if (text.includes('Search')) {
+            const query = text.replace(/Search[:：\[\]]/g, '').trim()
+            items.push({ type: 'search', query: query || text, status: 'loading', result: '' })
+          }
+        } else if (eventType === 'observation') {
+          const searchItem = [...items].reverse().find(i => i.type === 'search' && i.status === 'loading')
+          if (searchItem) {
+            searchItem.status = 'done'
+            searchItem.result = typeof content === 'string' ? content : JSON.stringify(content)
+          } else {
+            items.push({ type: 'text', content: `[Observation] ${String(content ?? '')}` })
+          }
+        } else if (eventType === 'result') {
+          const results = Array.isArray(content) ? content : content ? [content] : []
+          for (const p of results) {
+            items.push({ type: 'persona', persona: p })
+          }
+          items.push({
+            type: 'text',
+            content: results.length ? `完成，共生成 ${results.length} 个角色。` : '生成完成。'
+          })
+        } else if (eventType === 'error') {
+          const errorContent = typeof content === 'string' ? content : '生成失败'
+          items.push({ type: 'error', content: errorContent })
+          message.error(errorContent)
+        } else if (typeof content === 'string' && content.trim()) {
+          appendThought(items, content)
+        }
+
+        scrollToBottom()
+      }
+    }
+
+    if (!assistantMsg.items || assistantMsg.items.length === 0) {
+      assistantMsg.items = [{ type: 'text', content: '生成完成。' }]
+    }
+  } catch (error: any) {
+    assistantMsg.items?.push({ type: 'error', content: error.message || '生成失败' })
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleCancel = () => {
@@ -409,7 +373,6 @@ const handleViewPersona = () => {
   router.push('/personas')
 }
 
-// Watch visibility to refresh list when modal closes if generation happened
 watch(visible, (newVal) => {
   if (!newVal && messages.value.some(m => m.items?.some(i => i.type === 'persona'))) {
     personaStore.fetchPersonas()
@@ -629,4 +592,5 @@ watch(visible, (newVal) => {
   gap: 6px;
 }
 </style>
+
 

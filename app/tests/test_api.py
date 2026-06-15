@@ -1,4 +1,5 @@
 import pytest
+import random
 
 def get_auth_headers(client, username="testuser", password="password123"):
     client.post("/api/v1/auth/register", json={"username": username, "password": password})
@@ -10,20 +11,22 @@ def get_auth_headers(client, username="testuser", password="password123"):
     return {"Authorization": f"Bearer {token}"}
 
 def test_create_user(client):
+    username = f"testuser_{random.randint(10000, 99999)}"
     response = client.post(
         "/api/v1/users/",
-        json={"username": "testuser", "password": "password123", "role": "user"}
+        json={"username": username, "password": "password123", "role": "user"}
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["username"] == "testuser"
+    assert data["username"] == username
     assert "id" in data
 
 def test_login(client):
-    client.post("/api/v1/users/", json={"username": "testuser", "password": "password123", "role": "user"})
+    username = f"testuser_{random.randint(10000, 99999)}"
+    client.post("/api/v1/users/", json={"username": username, "password": "password123", "role": "user"})
     response = client.post(
         "/api/v1/auth/login",
-        data={"username": "testuser", "password": "password123"}
+        data={"username": username, "password": "password123"}
     )
     assert response.status_code == 200
     assert "access_token" in response.json()
@@ -51,7 +54,7 @@ def test_create_persona(client):
             "name": "Socrates",
             "bio": "Greek philosopher",
             "theories": ["Method", "Ethics"],
-            "is_public": True
+            "is_public": False
         }
     )
     assert response.status_code == 200

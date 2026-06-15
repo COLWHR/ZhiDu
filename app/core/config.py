@@ -1,5 +1,8 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import os
+import secrets
+from pathlib import Path
+import re
 from typing import Optional
 import redis
 import logging
@@ -17,6 +20,9 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str = "MADF User Management API"
     API_V1_STR: str = "/api/v1"
+    ENVIRONMENT: str = "development"
+    FRONTEND_URL: Optional[str] = None
+    CORS_ORIGINS: Optional[str] = None
     
     # LLM API Configuration
     API_KEY: Optional[str] = None
@@ -42,13 +48,42 @@ class Settings(BaseSettings):
     @property
     def final_base_url(self) -> str:
         return self.BASE_URL or os.environ.get("BASE_URL") or "https://open.bigmodel.cn/api/paas/v4/"
+
+    @property
+    def cors_allow_origins(self) -> list[str]:
+        raw = self.CORS_ORIGINS or os.environ.get("CORS_ORIGINS")
+        origins: list[str] = []
+
+        if raw:
+            for origin in re.split(r"[,\s]+", raw):
+                cleaned = origin.strip().rstrip("/")
+                if cleaned:
+                    origins.append(cleaned)
+        else:
+            origins.extend([
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+            ])
+
+        if self.FRONTEND_URL:
+            frontend_origin = self.FRONTEND_URL.strip().rstrip("/")
+            if frontend_origin:
+                origins.append(frontend_origin)
+
+        deduped: list[str] = []
+        for origin in origins:
+            if origin not in deduped:
+                deduped.append(origin)
+        return deduped
     
     # Search API Configuration
     SERPAPI_API_KEY: Optional[str] = None
     
     # Security
-    SECRET_KEY: str = "MADF_DEFAULT_INSECURE_SECRET_KEY_PLEASE_CHANGE_IN_PROD"
+    SECRET_KEY: Optional[str] = None
+    SECRET_KEY_FILE: Optional[str] = None
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # Database Configuration
     TURSO_DATABASE_URL: Optional[str] = None
@@ -58,7 +93,47 @@ class Settings(BaseSettings):
     # Redis Configuration
     # Default to localhost inside the same container or service mesh
     REDIS_URL: str = "redis://localhost:6379/0"
-    
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT.strip().lower() in {"prod", "production", "release"}
+
+    @property
+    def final_secret_key(self) -> str:
+        default_insecure = "MADF_DEFAULT_INSECURE_SECRET_KEY_PLEASE_CHANGE_IN_PROD"
+
+        if self.SECRET_KEY_FILE:
+            key_path = Path(self.SECRET_KEY_FILE)
+            if key_path.exists():
+                secret = key_path.read_text(encoding="utf-8").strip()
+                if secret and secret != default_insecure:
+                    return secret
+
+        key = (
+            self.SECRET_KEY
+            or os.environ.get("SECRET_KEY")
+            or os.environ.get("JWT_SECRET_KEY")
+            or os.environ.get("APP_SECRET_KEY")
+        )
+        if key and key != default_insecure:
+            return key
+
+        if self.is_production:
+            raise ValueError(
+                "SECRET_KEY must be set in production. "
+                "Provide SECRET_KEY, SECRET_KEY_FILE, or APP_SECRET_KEY."
+            )
+
+        runtime_key = getattr(self, "_runtime_secret_key", None)
+        if not runtime_key:
+            runtime_key = secrets.token_urlsafe(48)
+            setattr(self, "_runtime_secret_key", runtime_key)
+            logger.warning(
+                "SECRET_KEY is not set. Generated a temporary development key "
+                "for this process only."
+            )
+        return runtime_key
+
     # Determine which database to use
     @property
     def DATABASE_URL(self) -> str:

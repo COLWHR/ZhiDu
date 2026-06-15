@@ -1,0 +1,43 @@
+<view class="login-container">
+  <view class="hero-section">
+    <image class="hero-image" src="/assets/images/login-illustration-cutout.png" mode="aspectFit"></image>
+    <text class="brand-name">ZhiDo</text>
+  </view>
+
+  <view class="text-section">
+    <text class="main-title">开启智能之旅</text>
+    <text class="sub-title">登录后连接您的专属AI助手</text>
+  </view>
+
+  <view class="form-section">
+    <view class="field">
+      <input class="login-input" placeholder="用户名" placeholder-class="placeholder-style" value="{{username}}" bindinput="onUsernameInput" />
+    </view>
+    <view class="field">
+      <input class="login-input" placeholder="密码" placeholder-class="placeholder-style" password value="{{password}}" bindinput="onPasswordInput" />
+    </view>
+    <view class="error" wx:if="{{error}}">{{error}}</view>
+  </view>
+
+  <view class="action-section">
+    <button class="btn-wechat" loading="{{loading}}" bindtap="handleLogin">
+      <text>立即登录</text>
+    </button>
+
+    <view class="secondary-links">
+      <text bindtap="goRegister">注册账号</text>
+    </view>
+  </view>
+
+  <view class="agreement-section">
+    <view class="checkbox {{isAgreed ? 'checked' : ''}}" bindtap="toggleAgreement">
+      <text wx:if="{{isAgreed}}" class="check-mark">✓</text>
+    </view>
+    <view class="agreement-text">
+      <text>我已阅读并同意</text>
+      <text class="link-text" bindtap="goUserProtocol">《用户协议》</text>
+      <text>和</text>
+      <text class="link-text" bindtap="goPrivacyPolicy">《隐私政策》</text>
+    </view>
+  </view>
+</view>

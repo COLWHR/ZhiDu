@@ -1,0 +1,133 @@
+<view class="page">
+  <view class="duxin-header">
+    <view class="header-top">
+      <view class="title-area">
+        <text class="main-title">渡心</text>
+        <text class="sub-title">记录当下状态，整理情绪线索，生成温和回应，并沉淀你的会话记忆。</text>
+      </view>
+      <view class="header-actions">
+        <view class="icon-btn-circle" bindtap="refreshData">
+          <image class="refresh-icon" src="/assets/icons/refresh-purple.png" mode="aspectFit"></image>
+        </view>
+        <view class="archive-btn" bindtap="archiveCurrentSession">归档</view>
+      </view>
+    </view>
+  </view>
+
+  <scroll-view scroll-x class="category-tabs" enhanced show-scrollbar="{{false}}">
+    <view
+      class="tab-item {{mode === item.key ? 'active' : ''}}"
+      wx:for="{{quickModes}}"
+      wx:key="key"
+      data-mode="{{item.key}}"
+      bindtap="selectMode"
+    >
+      {{item.label}}
+    </view>
+  </scroll-view>
+
+  <view class="input-card card-light">
+    <textarea
+      class="main-textarea"
+      value="{{draft}}"
+      bindinput="onDraftInput"
+      placeholder="把你现在最真实的状态说出来..."
+      placeholder-class="placeholder-style"
+      disable-default-padding
+    />
+    <view class="input-footer">
+      <button class="generate-chip" data-key="{{mode}}" bindtap="applyQuick">{{composerStatus || currentModeLabel}}</button>
+      <button class="send-btn" loading="{{streaming}}" bindtap="onSend">发送</button>
+    </view>
+  </view>
+
+  <view class="stats-row">
+    <view class="stat-card risk-card stat-dark">
+      <text class="stat-label">风险等级</text>
+      <text class="stat-value value-green">{{riskLevel}}</text>
+    </view>
+    <view class="stat-card stat-light">
+      <text class="stat-label">记忆数</text>
+      <text class="stat-value value-purple">{{memories.length}}</text>
+    </view>
+    <view class="stat-card stat-accent">
+      <text class="stat-label">会话数</text>
+      <text class="stat-value value-purple">{{sessions.length}}</text>
+      <view class="stat-action-dot">&gt;</view>
+      <view class="stat-doc-mark">
+        <view></view>
+        <view></view>
+        <view></view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{riskSummary}}" class="list-card list-card-accent">
+    <view class="card-title-row">
+      <view class="vertical-bar bar-green"></view>
+      <text class="card-title">稳定提示</text>
+    </view>
+    <view class="card-content">
+      <text class="body-text">{{riskSummary}}</text>
+    </view>
+  </view>
+
+  <view class="list-card list-card-dark">
+    <view class="card-title-row">
+      <view class="vertical-bar bar-purple"></view>
+      <text class="card-title">最近会话</text>
+    </view>
+    <view class="card-content">
+      <scroll-view wx:if="{{sessions.length > 0}}" scroll-x>
+        <view class="session-list">
+          <view
+            class="session-item {{currentSession && currentSession.id === item.id ? 'active' : ''}}"
+            wx:for="{{sessions}}"
+            wx:key="id"
+            data-id="{{item.id}}"
+            bindtap="openSession"
+          >
+            <text class="session-title">{{item.title}}</text>
+            <text class="session-meta">{{item.mode}} · {{item.updated_at || item.created_at}}</text>
+          </view>
+        </view>
+      </scroll-view>
+      <text wx:else class="empty-text">暂无会话</text>
+    </view>
+  </view>
+
+  <view class="list-card dialog-record-card list-card-light">
+    <view class="card-title-row">
+      <view class="vertical-bar bar-purple"></view>
+      <text class="card-title">对话记录</text>
+    </view>
+    <view class="card-content">
+      <view wx:if="{{messages.length === 0}}" class="empty-dialog">还没有开始，先发第一句。</view>
+      <view wx:else class="message-list">
+        <view class="message {{item.role}}" wx:for="{{messages}}" wx:key="id">
+          <view class="bubble">{{item.content}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="list-card memory-summary-card">
+    <view class="card-title-row">
+      <view class="vertical-bar bar-purple"></view>
+      <text class="card-title">记忆摘要</text>
+    </view>
+    <view class="card-content">
+      <text class="body-text">{{memorySummary ? (memorySummary.summary || '暂无摘要') : '暂无摘要'}}</text>
+    </view>
+  </view>
+
+  <view class="list-card list-card-light">
+    <view class="card-title-row">
+      <view class="vertical-bar bar-green"></view>
+      <text class="card-title">安全反馈</text>
+    </view>
+    <view class="card-content">
+      <text class="body-text">总数：{{feedbackSummary ? (feedbackSummary.total_count || 0) : 0}}，平均风险：{{feedbackSummary ? (feedbackSummary.avg_risk_level || 'N/A') : 'N/A'}}</text>
+    </view>
+  </view>
+</view>

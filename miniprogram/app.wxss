@@ -1,0 +1,67 @@
+page {
+  background: #f4f7f5;
+  color: #1a1d1e;
+  font-size: 28rpx;
+}
+
+.page-shell {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 32rpx;
+  background:
+    radial-gradient(circle at top left, rgba(59, 179, 107, 0.12), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(235, 247, 238, 0.9), transparent 26%),
+    #f4f7f5;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 48rpx;
+  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.title {
+  font-size: 44rpx;
+  font-weight: 700;
+  color: #1a1d1e;
+}
+
+.subtitle {
+  margin-top: 8rpx;
+  color: #787f84;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a1d1e;
+  margin-bottom: 18rpx;
+}
+
+.muted {
+  color: #787f84;
+}
+
+.input {
+  width: 100%;
+  min-height: 92rpx;
+  background: #f8faf8;
+  border-radius: 28rpx;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+}
+
+.btn-primary {
+  background: #3bb36b;
+  color: #fff;
+  border-radius: 999rpx;
+}
+
+.btn-ghost {
+  background: #ebf7ee;
+  color: #2fa15c;
+  border-radius: 999rpx;
+}

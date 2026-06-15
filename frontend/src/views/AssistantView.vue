@@ -808,20 +808,29 @@ const handleAdd = () => {
 };
 
 const addToAgentWorkshop = () => {
-  if (selectedAgent.value) {
-    const personaData = {
-      name: selectedAgent.value.name,
-      title: selectedAgent.value.description,
-      bio: selectedAgent.value.description,
-      stance: selectedAgent.value.description,
-      system_prompt: selectedAgent.value.prompt,
-      theories: selectedAgent.value.group || [],
-      is_public: false
-    };
-    personaStore.createPersona(personaData);
-    showToastMessage('已添加到智能体工坊');
-    showModal.value = false;
-  }
+  if (!selectedAgent.value) return;
+
+  const personaData = {
+    name: selectedAgent.value.name,
+    title: selectedAgent.value.description,
+    bio: selectedAgent.value.description,
+    stance: selectedAgent.value.description,
+    system_prompt: selectedAgent.value.prompt,
+    theories: selectedAgent.value.group || [],
+    is_public: false
+  };
+
+  personaStore.createPersona(personaData)
+    .then(async () => {
+      await personaStore.fetchPersonas();
+      showToastMessage('已添加到智能体工坊');
+      showModal.value = false;
+      router.push('/personas');
+    })
+    .catch((error) => {
+      console.error('Failed to add persona to workshop:', error);
+      showToastMessage('添加失败，请稍后重试');
+    });
 };
 
 const showToastMessage = (message: string) => {

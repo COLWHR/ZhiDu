@@ -12,7 +12,7 @@
       <div class="logo">
         <img src="@/assets/logo.png" alt="智渡" class="logo-icon" />
         <span v-if="!collapsed" class="logo-text">智渡</span>
-        <span v-else class="logo-text">渡</span>
+        <span v-else class="logo-text">智</span>
       </div>
       
 
@@ -83,7 +83,6 @@ const collapsed = ref(false)
 
 const handleLogout = async () => {
   await authStore.logout()
-  router.push('/login')
 }
 
 const navigateTo = (path: string) => {
@@ -99,10 +98,10 @@ const selectedKeys = computed(() => {
   return []
 })
 
-// 监听登录状态
+// 监听登录状�?
 watch(() => authStore.token, (token) => {
   if (!token) {
-    router.push('/login')
+    router.push('/auth/login')
   }
 }, { immediate: true })
 </script>
@@ -212,3 +211,5 @@ watch(() => authStore.token, (token) => {
   min-height: 100vh;
 }
 </style>
+
+
