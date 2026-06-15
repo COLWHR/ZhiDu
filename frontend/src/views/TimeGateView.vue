@@ -1,12 +1,17 @@
-<template>
+﻿<template>
   <div class="time-gate-page">
+    <div class="page-orb orb-left"></div>
+    <div class="page-orb orb-right"></div>
     <a-layout class="chat-layout">
       <!-- 左侧智能体列表 -->
       <a-layout-sider width="280" class="sider-section">
         <div class="sider-header">
-          <h3 class="sider-title">我的智能体</h3>
+          <div>
+            <h3 class="sider-title">我的智能体</h3>
+            <p class="sider-subtitle">选择一个角色，进入时空对话</p>
+          </div>
           <a-button type="primary" size="small" ghost @click="handleAddAgent">
-            <plus-outlined /> 添加
+            <plus-outlined /> 新增
           </a-button>
         </div>
         
@@ -42,12 +47,19 @@
         </div>
       </a-layout-sider>
       
-      <!-- 右侧对话区域 -->
+      <!-- 右侧对话区 -->
       <a-layout class="chat-section">
         <div v-if="!currentAgent" class="chat-welcome">
-          <div class="welcome-avatar">⏳</div>
-          <h2>欢迎来到时空之门</h2>
-          <p>选择左侧的智能体，开启跨时空对话</p>
+          <div class="welcome-card">
+            <div class="welcome-avatar">⌛</div>
+            <h2>欢迎来到时空之门</h2>
+            <p>选择左侧的智能体，开始跨时空对话</p>
+            <div class="welcome-badges">
+              <span class="welcome-badge">流式回复</span>
+              <span class="welcome-badge">图片发送</span>
+              <span class="welcome-badge">清空重开</span>
+            </div>
+          </div>
         </div>
         
         <div v-else class="chat-container">
@@ -57,10 +69,16 @@
               <a-avatar size="small" :style="{ background: getAvatarGradient(currentAgent.name) }">
                 {{ currentAgent.name[0] }}
               </a-avatar>
-              <span class="agent-name">{{ currentAgent.name }}</span>
-              <span class="agent-title">{{ currentAgent.title }}</span>
+              <div class="agent-meta">
+                <span class="agent-name">{{ currentAgent.name }}</span>
+                <span class="agent-title">{{ currentAgent.title }}</span>
+                <span class="agent-bio">{{ currentAgentBio }}</span>
+              </div>
             </div>
             <div class="header-actions">
+              <span class="status-pill" :class="{ loading }">
+                {{ loading ? '生成中' : currentConversationSummary }}
+              </span>
               <a-button type="text" size="small" @click="clearChat">
                 <delete-outlined /> 清空对话
               </a-button>
@@ -115,12 +133,12 @@
                 style="display: none" 
                 @change="handleImageUpload"
               />
-              <span class="tip-text">支持粘贴图片（Ctrl+V）直接发送</span>
+              <span class="tip-text">支持粘贴图片（Ctrl+V）直接发送，上传后会自动转为可发送内容</span>
             </div>
             <a-textarea
               v-model:value="inputMessage"
               :rows="3"
-              placeholder="请输入消息，按Enter发送，Shift+Enter换行，支持粘贴/上传图片"
+              placeholder="请输入消息，按 Enter 发送，Shift+Enter 换行，支持粘贴图片"
               @keydown.enter="handleSend"
               @paste="handlePaste"
               :disabled="loading"
@@ -144,132 +162,129 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, computed } from 'vue';
-import { usePersonaStore } from '@/stores/persona';
-import { useAuthStore } from '@/stores/auth';
-import { 
-  PlusOutlined, 
-  MoreOutlined, 
-  SendOutlined, 
+import { ref, onMounted, nextTick, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { usePersonaStore } from '@/stores/persona'
+import { useAuthStore } from '@/stores/auth'
+import {
+  PlusOutlined,
+  MoreOutlined,
+  SendOutlined,
   DeleteOutlined,
   PictureOutlined
-} from '@ant-design/icons-vue';
-import { message } from 'ant-design-vue';
-import request from '@/utils/request';
-import { marked } from 'marked';
+} from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
+import request from '@/utils/request'
+import { marked } from 'marked'
 
-const personaStore = usePersonaStore();
-const authStore = useAuthStore();
+const personaStore = usePersonaStore()
+const authStore = useAuthStore()
+const router = useRouter()
 
-// 状态
-const currentAgent = ref<any>(null);
-const messages = ref<Array<{ role: 'user' | 'assistant', content: string, timestamp: number }>>([]);
-const inputMessage = ref('');
-const loading = ref(false);
-const uploadingImage = ref(false);
-const messagesContainer = ref<HTMLElement | null>(null);
-const imageInput = ref<HTMLInputElement | null>(null);
+const currentAgent = ref<any>(null)
+const messages = ref<Array<{ role: 'user' | 'assistant', content: string, timestamp: number, isWelcome?: boolean }>>([])
+const inputMessage = ref('')
+const loading = ref(false)
+const uploadingImage = ref(false)
+const messagesContainer = ref<HTMLElement | null>(null)
+const imageInput = ref<HTMLInputElement | null>(null)
+const currentAgentBio = computed(() => currentAgent.value?.bio?.trim() || '这位智能体还没有写简介。')
+const currentConversationSummary = computed(() => {
+  const userMessages = messages.value.filter(msg => !msg.isWelcome)
+  return `${userMessages.length} 条消息`
+})
 
-// 计算属性
 const getAvatarGradient = (name: string) => {
-  const colors = [
-    '#667eea', '#764ba2', '#f093fb', '#4facfe',
-    '#43e97b', '#fa709a', '#fee140', '#30cfd0'
-  ];
-  const index = name.charCodeAt(0) % colors.length;
-  return colors[index];
-};
+  const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#30cfd0']
+  return colors[name.charCodeAt(0) % colors.length]
+}
 
-// 方法
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  })
+}
+
+const welcomeMessage = (agent: any) => ({
+  role: 'assistant' as const,
+  content: `你好，我是 ${agent.name}。${agent.bio || '很高兴和你交流。'}`,
+  timestamp: Date.now(),
+  isWelcome: true
+})
+
 const handleAddAgent = () => {
-  message.info('请先去智能体工坊创建智能体');
-};
+  message.info('请先去智能体工坊创建智能体')
+  router.push('/personas')
+}
 
 const switchAgent = async (agent: any) => {
-  currentAgent.value = agent;
-  messages.value = [];
-  loading.value = true;
-  
+  currentAgent.value = agent
+  messages.value = []
+  inputMessage.value = ''
+  loading.value = true
+
   try {
-    // 加载历史对话
-    const res = await request.get(`/agents/chat/history/${agent.id}`);
+    const res = await request.get('/agents/chat/history/' + agent.id)
     if (res.data && res.data.length > 0) {
-      messages.value = res.data;
+      messages.value = res.data
     } else {
-      // 没有历史记录，显示欢迎消息
-      messages.value.push({
-        role: 'assistant',
-        content: `你好，我是${agent.name}。${agent.bio || '很高兴能和你交流！'}`,
-        timestamp: Date.now()
-      });
+      messages.value.push(welcomeMessage(agent))
     }
   } catch (error) {
-    console.error('加载历史对话失败:', error);
-    // 加载失败也显示欢迎消息
-    messages.value.push({
-      role: 'assistant',
-      content: `你好，我是${agent.name}。${agent.bio || '很高兴能和你交流！'}`,
-      timestamp: Date.now()
-    });
+    console.error('加载历史对话失败:', error)
+    messages.value.push(welcomeMessage(agent))
   } finally {
-    loading.value = false;
-    await nextTick();
-    scrollToBottom();
+    loading.value = false
+    await nextTick()
+    scrollToBottom()
   }
-};
+}
 
 const handleSend = async (e?: KeyboardEvent) => {
-  if (e && e.shiftKey) return;
-  e?.preventDefault();
-  
+  if (e && e.shiftKey) return
+  e?.preventDefault()
+
   if (!currentAgent.value) {
-    message.warning('请先选择一个智能体');
-    return;
+    message.warning('请先选择一个智能体')
+    return
   }
-  
-  const content = inputMessage.value.trim();
-  if (!content) return;
-  
-  // 添加用户消息
-  messages.value.push({
-    role: 'user',
-    content,
-    timestamp: Date.now()
-  });
-  inputMessage.value = '';
-  loading.value = true;
-  
-  // 添加空的助手回复，用于流式填充
-  const assistantMsgIndex = messages.value.length;
-  messages.value.push({
-    role: 'assistant',
-    content: '',
-    timestamp: Date.now()
-  });
-  
-  await nextTick();
-  scrollToBottom();
-  
+
+  const content = inputMessage.value.trim()
+  if (!content) return
+
+  messages.value.push({ role: 'user', content, timestamp: Date.now() })
+  inputMessage.value = ''
+  loading.value = true
+
+  const assistantMsgIndex = messages.value.length
+  messages.value.push({ role: 'assistant', content: '', timestamp: Date.now() })
+
+  await nextTick()
+  scrollToBottom()
+
   try {
-    // 保存用户消息
     await request.post('/agents/chat/message', {
       persona_id: currentAgent.value.id,
       role: 'user',
-      content: content
-    });
-    
-    // 构造历史消息（排除刚添加的空助手消息）
-    const contextMessages = messages.value.slice(0, -1).map(msg => ({
-      speaker: msg.role === 'user' ? '用户' : currentAgent.value.name,
-      content: msg.content
-    }));
-    
-    // 调用流式对话API
+      content
+    })
+
+    const contextMessages = messages.value
+      .slice(0, -1)
+      .filter(msg => !msg.isWelcome && msg.content.trim().length > 0)
+      .map(msg => ({
+        role: msg.role,
+        speaker: msg.role === 'user' ? '用户' : currentAgent.value.name,
+        content: msg.content
+      }))
+
     const response = await fetch('/api/v1/agents/chat/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authStore.token}`
+        Authorization: 'Bearer ' + (authStore.token || '')
       },
       body: JSON.stringify({
         agent_name: currentAgent.value.name,
@@ -277,215 +292,243 @@ const handleSend = async (e?: KeyboardEvent) => {
         context_messages: contextMessages,
         theme: '自由对话'
       })
-    });
-    
+    })
+
     if (!response.ok) {
-      throw new Error('网络请求失败');
+      const detail = await response.text().catch(() => '')
+      throw new Error(detail || '网络请求失败')
     }
-    
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder('utf-8');
-    
-    if (reader) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n\n').filter(line => line.trim() !== '');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
-            
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                messages.value[assistantMsgIndex].content += parsed.content;
-                await nextTick();
-                scrollToBottom();
-              } else if (parsed.error) {
-                throw new Error(parsed.error);
-              }
-            } catch (e) {
-              console.error('解析响应失败:', e);
-            }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error('未能读取流式响应')
+    }
+
+    const decoder = new TextDecoder('utf-8')
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() || ''
+
+      for (const part of parts) {
+        const line = part.trim()
+        if (!line.startsWith('data: ')) continue
+
+        const data = line.slice(6).trim()
+        if (!data || data === '[DONE]') continue
+
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed.content) {
+            messages.value[assistantMsgIndex].content += parsed.content
+            await nextTick()
+            scrollToBottom()
+          } else if (parsed.error) {
+            throw new Error(parsed.error)
           }
+        } catch (parseError) {
+          console.error('解析流式响应失败:', parseError)
         }
       }
     }
-    
-    // 如果内容为空，显示默认提示
+
     if (!messages.value[assistantMsgIndex].content.trim()) {
-      messages.value[assistantMsgIndex].content = '抱歉，我暂时无法回答这个问题。';
+      messages.value[assistantMsgIndex].content = '抱歉，时空之门暂时无法调用模型服务，请检查后端 API_KEY / BASE_URL 配置后再试。'
     }
-    
-    // 保存助手回复
+
     await request.post('/agents/chat/message', {
       persona_id: currentAgent.value.id,
       role: 'assistant',
       content: messages.value[assistantMsgIndex].content
-    });
-    
+    })
   } catch (error) {
-    console.error('对话失败:', error);
-    message.error('对话失败，请稍后重试');
-    messages.value[assistantMsgIndex].content = '抱歉，我遇到了一些问题，暂时无法回答你的问题。';
-    
-    // 保存错误回复
+    console.error('对话失败:', error)
+    message.error('对话失败，请稍后重试')
+    messages.value[assistantMsgIndex].content = error instanceof Error && error.message
+      ? error.message
+      : '抱歉，时空之门暂时无法回答这个问题。'
+
     await request.post('/agents/chat/message', {
       persona_id: currentAgent.value.id,
       role: 'assistant',
       content: messages.value[assistantMsgIndex].content
-    });
+    })
   } finally {
-    loading.value = false;
-    await nextTick();
-    scrollToBottom();
+    loading.value = false
+    await nextTick()
+    scrollToBottom()
   }
-};
+}
 
 const clearChat = async () => {
-  if (!currentAgent.value) return;
-  
-  try {
-    await request.delete(`/agents/chat/history/${currentAgent.value.id}`);
-    messages.value = [];
-    messages.value.push({
-      role: 'assistant',
-      content: `你好，我是${currentAgent.value.name}。${currentAgent.value.bio || '很高兴能和你交流！'}`,
-      timestamp: Date.now()
-    });
-    message.success('对话历史已清空');
-  } catch (error) {
-    console.error('清空对话失败:', error);
-    message.error('清空对话失败，请稍后重试');
-  }
-};
+  if (!currentAgent.value) return
 
-const formatMessage = (content: string) => {
-  return marked.parse(content);
-};
+  try {
+    await request.delete('/agents/chat/history/' + currentAgent.value.id)
+    inputMessage.value = ''
+    messages.value = [welcomeMessage(currentAgent.value)]
+    message.success('对话历史已清空')
+    await nextTick()
+    scrollToBottom()
+  } catch (error) {
+    console.error('清空对话失败:', error)
+    message.error('清空对话失败，请稍后重试')
+  }
+}
+
+const formatMessage = (content: string) => marked.parse(content)
 
 const formatTime = (timestamp: number) => {
-  const date = new Date(timestamp);
-  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-};
+  const date = new Date(timestamp)
+  return date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0')
+}
 
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-    }
-  });
-};
-
-// 图片上传相关
 const triggerImageUpload = () => {
-  imageInput.value?.click();
-};
-
-const handleImageUpload = async (e: Event) => {
-  const target = e.target as HTMLInputElement;
-  const file = target.files?.[0];
-  if (!file) return;
-  
-  await uploadAndInsertImage(file);
-  target.value = ''; // 重置input，允许重复选择同一文件
-};
-
-const handlePaste = async (e: ClipboardEvent) => {
-  const items = e.clipboardData?.items;
-  if (!items) return;
-  
-  for (const item of items) {
-    if (item.type.indexOf('image') !== -1) {
-      e.preventDefault();
-      const file = item.getAsFile();
-      if (file) {
-        await uploadAndInsertImage(file);
-      }
-      break;
-    }
-  }
-};
+  imageInput.value?.click()
+}
 
 const uploadAndInsertImage = async (file: File) => {
   if (!file.type.startsWith('image/')) {
-    message.error('请选择图片文件');
-    return;
+    message.error('请选择图片文件')
+    return
   }
-  
-  // 限制图片大小为10MB
+
   if (file.size > 10 * 1024 * 1024) {
-    message.error('图片大小不能超过10MB');
-    return;
+    message.error('图片大小不能超过 10MB')
+    return
   }
-  
-  uploadingImage.value = true;
-  
+
+  uploadingImage.value = true
+
   try {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    const res = await request.post('/upload/image', formData);
-    
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const res = await request.post('/upload/image', formData)
+
     if (res.data && res.data.url) {
-      const imageMarkdown = `![image](${res.data.url})\n`;
-      inputMessage.value += imageMarkdown;
-      message.success('图片上传成功');
+      inputMessage.value += `![image](${res.data.url})\n`
+      message.success('图片上传成功')
     } else {
-      throw new Error('上传失败，未返回图片URL');
+      throw new Error('上传失败，未返回图片 URL')
     }
   } catch (error) {
-    console.error('图片上传失败:', error);
-    message.error('图片上传失败，请稍后重试');
+    console.error('图片上传失败:', error)
+    message.error('图片上传失败，请稍后重试')
   } finally {
-    uploadingImage.value = false;
+    uploadingImage.value = false
   }
-};
+}
+
+const handleImageUpload = async (e: Event) => {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  await uploadAndInsertImage(file)
+  target.value = ''
+}
+
+const handlePaste = async (e: ClipboardEvent) => {
+  const items = e.clipboardData?.items
+  if (!items) return
+
+  for (const item of items) {
+    if (item.type.indexOf('image') !== -1) {
+      e.preventDefault()
+      const file = item.getAsFile()
+      if (file) {
+        await uploadAndInsertImage(file)
+      }
+      break
+    }
+  }
+}
 
 onMounted(() => {
-  personaStore.fetchPersonas(authStore.user?.id);
-});
+  personaStore.fetchPersonas(authStore.user?.id)
+})
 </script>
 
 <style scoped>
 .time-gate-page {
+  position: relative;
   height: 100vh;
-  background: #f5f7fa;
+  background:
+    radial-gradient(circle at top left, rgba(102, 126, 234, 0.16), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(113, 201, 206, 0.16), transparent 28%),
+    linear-gradient(180deg, #f8fbff 0%, #eef3f8 100%);
   overflow: hidden;
 }
 
 .chat-layout {
+  position: relative;
+  z-index: 1;
   height: 100%;
 }
 
+.page-orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(4px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.orb-left {
+  top: -120px;
+  left: -100px;
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(circle, rgba(102, 126, 234, 0.45) 0%, rgba(102, 126, 234, 0) 70%);
+}
+
+.orb-right {
+  right: -120px;
+  bottom: -120px;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(113, 201, 206, 0.38) 0%, rgba(113, 201, 206, 0) 68%);
+}
+
 .sider-section {
-  background: white;
-  border-right: 1px solid #f0f0f0;
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(18px);
+  border-right: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 10px 0 40px rgba(31, 41, 55, 0.08);
 }
 
 .sider-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 20px 16px;
-  border-bottom: 1px solid #f0f0f0;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 22px 18px 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .sider-title {
   font-size: 16px;
   font-weight: 600;
   margin: 0;
-  color: #1a1a2e;
+  color: #10213a;
+  letter-spacing: 0.01em;
+}
+
+.sider-subtitle {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .agent-list {
-  padding: 8px;
-  height: calc(100vh - 74px);
+  padding: 10px 10px 14px;
+  height: calc(100vh - 86px);
   overflow-y: auto;
 }
 
@@ -495,23 +538,27 @@ onMounted(() => {
   gap: 12px;
   padding: 12px;
   margin-bottom: 4px;
-  border-radius: 10px;
+  border-radius: 14px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
 .agent-item:hover {
-  background: #f5f3ff;
+  background: rgba(255, 255, 255, 0.75);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
 }
 
 .agent-item.active {
-  background: linear-gradient(135deg, #a6e3e9 0%, #71c9ce 100%);
+  background: linear-gradient(135deg, #667eea 0%, #71c9ce 100%);
   color: white;
+  box-shadow: 0 16px 32px rgba(102, 126, 234, 0.24);
 }
 
 .agent-info {
   flex: 1;
   overflow: hidden;
+  min-width: 0;
 }
 
 .agent-name {
@@ -558,7 +605,8 @@ onMounted(() => {
 
 /* 对话区域 */
 .chat-section {
-  background: #f5f7fa;
+  position: relative;
+  background: transparent;
 }
 
 .chat-welcome {
@@ -567,19 +615,62 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #888;
+  color: #64748b;
+  padding: 32px;
+}
+
+.welcome-card {
+  max-width: 520px;
+  width: 100%;
+  padding: 32px 28px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  text-align: center;
+  backdrop-filter: blur(18px);
 }
 
 .welcome-avatar {
-  font-size: 64px;
-  margin-bottom: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 84px;
+  margin-bottom: 18px;
+  border-radius: 50%;
+  font-size: 36px;
+  color: #0f172a;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(113, 201, 206, 0.28));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .chat-welcome h2 {
   font-size: 24px;
   font-weight: 600;
   margin-bottom: 12px;
-  color: #1a1a2e;
+  color: #10213a;
+}
+
+.welcome-card p {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.welcome-badges {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.welcome-badge {
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #334155;
+  background: rgba(148, 163, 184, 0.14);
 }
 
 .chat-container {
@@ -591,41 +682,87 @@ onMounted(() => {
 .chat-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  background: white;
-  border-bottom: 1px solid #f0f0f0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 24px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.06);
 }
 
 .current-agent-info {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
-.current-agent-info .agent-name {
+.agent-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.agent-meta .agent-name {
   font-weight: 600;
-  color: #1a1a2e;
+  color: #10213a;
 }
 
-.current-agent-info .agent-title {
+.agent-meta .agent-title {
   font-size: 13px;
-  color: #888;
-  margin-left: 8px;
+  color: #64748b;
+}
+
+.agent-bio {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #94a3b8;
+  max-width: 680px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #1e293b;
+  background: rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.status-pill.loading {
+  color: #334155;
+  background: rgba(102, 126, 234, 0.14);
+  border-color: rgba(102, 126, 234, 0.18);
 }
 
 .messages-container {
   flex: 1;
-  padding: 24px;
+  padding: 26px 24px 22px;
   overflow-y: auto;
-  background: #f5f7fa;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.65), transparent 40%),
+    transparent;
 }
 
 .message-item {
   display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
+  gap: 14px;
+  margin-bottom: 18px;
+  align-items: flex-end;
 }
 
 .message-item.user {
@@ -642,12 +779,14 @@ onMounted(() => {
 }
 
 .message-bubble {
-  padding: 12px 16px;
-  border-radius: 16px;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
   line-height: 1.6;
   word-break: break-word;
+  backdrop-filter: blur(12px);
 }
 
 .message-bubble p {
@@ -684,8 +823,10 @@ onMounted(() => {
 }
 
 .message-item.user .message-bubble {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #667eea 0%, #7c3aed 100%);
   color: white;
+  border-color: transparent;
+  box-shadow: 0 14px 30px rgba(102, 126, 234, 0.22);
 }
 
 .message-item.user .message-bubble code,
@@ -695,7 +836,7 @@ onMounted(() => {
 
 .message-time {
   font-size: 12px;
-  color: #888;
+  color: #94a3b8;
   margin-top: 4px;
   text-align: left;
 }
@@ -737,9 +878,10 @@ onMounted(() => {
 }
 
 .input-section {
-  padding: 16px 24px;
-  background: white;
-  border-top: 1px solid #f0f0f0;
+  padding: 16px 24px 20px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(18px);
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .input-toolbar {
@@ -748,21 +890,68 @@ onMounted(() => {
   gap: 12px;
   margin-bottom: 8px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .tip-text {
   font-size: 12px;
-  color: #999;
+  color: #94a3b8;
 }
 
 .chat-input {
-  border-radius: 12px;
+  border-radius: 16px;
   margin-bottom: 12px;
+  overflow: hidden;
 }
 
 .input-actions {
   display: flex;
   justify-content: flex-end;
 }
+
+@media (max-width: 960px) {
+  .time-gate-page {
+    min-height: 100vh;
+    height: auto;
+    overflow: auto;
+  }
+
+  .chat-layout {
+    flex-direction: column;
+  }
+
+  .sider-section {
+    width: 100% !important;
+    max-width: none !important;
+    flex: none !important;
+  }
+
+  .agent-list {
+    height: auto;
+    max-height: 34vh;
+  }
+
+  .chat-header,
+  .input-section,
+  .messages-container {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .messages-container {
+    padding-top: 18px;
+    padding-bottom: 18px;
+  }
+
+  .message-content {
+    max-width: 86%;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
 </style>
+
+

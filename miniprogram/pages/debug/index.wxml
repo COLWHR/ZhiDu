@@ -1,0 +1,63 @@
+<view class="page-shell debug-page">
+  <view class="card hero-card">
+    <view class="brand-badge">ZhiDo</view>
+    <view class="title">调试面板</view>
+    <view class="subtitle">查看当前请求地址、缓存状态和服务器连通性，定位注册失败原因。</view>
+  </view>
+
+  <view class="card info-card">
+    <view class="section-title">当前配置</view>
+    <view class="kv-list">
+      <view class="kv-item">
+        <text class="kv-label">默认 API</text>
+        <text class="kv-value selectable">{{defaultApiBaseUrl}}</text>
+      </view>
+      <view class="kv-item">
+        <text class="kv-label">当前 API</text>
+        <text class="kv-value selectable">{{apiBaseUrl}}</text>
+      </view>
+      <view class="kv-item">
+        <text class="kv-label">缓存 API</text>
+        <text class="kv-value selectable">{{storedApiBaseUrl || '（空）'}}</text>
+      </view>
+      <view class="kv-item">
+        <text class="kv-label">注册 URL</text>
+        <text class="kv-value selectable">{{registerUrl}}</text>
+      </view>
+      <view class="kv-item">
+        <text class="kv-label">健康检查 URL</text>
+        <text class="kv-value selectable">{{healthUrl}}</text>
+      </view>
+      <view class="kv-item">
+        <text class="kv-label">登录态检查 URL</text>
+        <text class="kv-value selectable">{{meUrl}}</text>
+      </view>
+      <view class="kv-item">
+        <text class="kv-label">缓存状态</text>
+        <text class="kv-value {{cacheStatusClass}}">{{cacheStatusText}}</text>
+      </view>
+      <view class="kv-item">
+        <text class="kv-label">Token 状态</text>
+        <text class="kv-value selectable">{{accessTokenState}} / {{refreshTokenState}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="card info-card">
+    <view class="section-title">操作</view>
+    <view class="action-row">
+      <button class="btn-primary action-btn" loading="{{testing}}" bindtap="testConnectivity">测试连通性</button>
+      <button class="btn-ghost action-btn" bindtap="resetApiCache">恢复默认 API</button>
+    </view>
+    <view class="action-row">
+      <button class="btn-ghost action-btn" bindtap="copyDebugInfo">复制调试信息</button>
+      <button class="btn-ghost action-btn" bindtap="back">返回</button>
+    </view>
+  </view>
+
+  <view class="card result-card" wx:if="{{resultText}}">
+    <view class="section-title">最近结果</view>
+    <view class="result-badge {{resultTypeClass}}">{{resultTypeText}}</view>
+    <view class="result-text selectable">{{resultText}}</view>
+  </view>
+</view>

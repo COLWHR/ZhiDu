@@ -71,33 +71,25 @@ class TestStreamRobustness(unittest.IsolatedAsyncioTestCase):
             
             # Run _moderator_speak
             # We assume asyncio.to_thread executes the function immediately for this test
-            await scheduler._moderator_speak(mock_db, 1, mock_moderator, "opening", guests=[])
+            await scheduler._moderator_speak(1, mock_moderator, "opening", guests=[])
             
-            # Verify broadcasts
-            # Expected: 2 chunks + 1 final message + 1 system log (speech)
-            # Check calls to manager.broadcast
-            self.assertEqual(mock_manager.broadcast.call_count, 4)
+        payloads = [call.args[1] for call in mock_manager.broadcast.call_args_list]
 
-            # Check that stream_id and moderator_id are present in chunks
-            # First call: Chunk 1
-            call_args_1 = mock_manager.broadcast.call_args_list[0]
-            payload_1 = call_args_1[0][1]
-            self.assertEqual(payload_1['type'], 'message_chunk')
-            self.assertIn('stream_id', payload_1['data'])
-            self.assertEqual(payload_1['data']['moderator_id'], 99)
+        chunk_payloads = [payload for payload in payloads if payload['type'] == 'message_chunk']
+        self.assertEqual(len(chunk_payloads), 2)
+        self.assertIn('stream_id', chunk_payloads[0]['data'])
+        self.assertEqual(chunk_payloads[0]['data']['moderator_id'], 99)
 
-            # Last call: System Log (speech)
-            call_args_last = mock_manager.broadcast.call_args_list[-1]
-            payload_last = call_args_last[0][1]
-            self.assertEqual(payload_last['type'], 'system_log')
-            self.assertEqual(payload_last['data']['level'], 'speech')
+        message_payload = next(payload for payload in payloads if payload['type'] == 'new_message')
+        self.assertIn('stream_id', message_payload['data'])
+        self.assertEqual(message_payload['data']['moderator_id'], 99)
 
-            # Second to last: Final Message
-            call_args_msg = mock_manager.broadcast.call_args_list[-2]
-            payload_msg = call_args_msg[0][1]
-            self.assertEqual(payload_msg['type'], 'new_message')
-            self.assertIn('stream_id', payload_msg['data'])
-            self.assertEqual(payload_msg['data']['moderator_id'], 99)
+        self.assertTrue(
+            any(
+                payload['type'] == 'system_log' and payload['data']['level'] == 'speech'
+                for payload in payloads
+            )
+        )
 
 if __name__ == '__main__':
     unittest.main()

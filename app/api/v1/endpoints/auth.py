@@ -1,12 +1,17 @@
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from datetime import timedelta
-from typing import Annotated, Any
+from pydantic import BaseModel
+from jose import JWTError
 
 from app.db.session import get_db
 from app.crud import get_user_by_username, create_user
 from app.schemas import Token, UserCreate, UserResponse
-from app.core.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from app.core.security import (
+    create_token_pair,
+    decode_token,
+)
 from app.core.hashing import Hasher
 
 import logging
@@ -14,6 +19,16 @@ import logging
 logger = logging.getLogger(__name__)
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+def _build_token_response(username: str) -> Token:
+    token_pair = create_token_pair(username)
+    return Token(**token_pair)
+
 
 @router.post("/login", response_model=Token)
 def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: Any = Depends(get_db)):
@@ -38,17 +53,66 @@ def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depen
             )
         
         logger.info(f"Successful login for user: {form_data.username}")
-        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = create_access_token(
-            subject=user.username, expires_delta=access_token_expires
-        )
-        return {"access_token": access_token, "token_type": "bearer"}
+        return _build_token_response(user.username)
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error during login for user {form_data.username}: {str(e)}", exc_info=True)
         # Re-raise to be caught by global exception handler, but we've logged it
         raise
+
+
+@router.post("/refresh", response_model=Token)
+def refresh_access_token(payload: RefreshTokenRequest, db: Any = Depends(get_db)):
+    if not payload.refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Refresh token is required",
+        )
+
+    try:
+        token_payload = decode_token(payload.refresh_token)
+        if str(token_payload.get("token_type") or "") != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        username = token_payload.get("sub")
+        if not username:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        user = get_user_by_username(db, username)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        logger.info("Refreshing token for user: %s", username)
+        return _build_token_response(user.username)
+    except JWTError as exc:
+        logger.warning("Invalid refresh token: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error refreshing token: %s", str(e), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not refresh credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 @router.post("/register", response_model=UserResponse)
 def register(user: UserCreate, db: Any = Depends(get_db)):

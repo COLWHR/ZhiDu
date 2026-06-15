@@ -22,6 +22,16 @@ def test_memory_operations():
     mem.add_message("Bob", "Hello")
     mem.add_message("Charlie", "Hey")
 
+def test_private_memory_clear_speeches():
+    from app.agent.memory import PrivateMemory
+
+    mem = PrivateMemory(n_participants=2)
+    mem.add_speech("First")
+    mem.add_speech("Second")
+    assert "First" in mem.get_speech_history_str()
+    mem.clear_speeches()
+    assert mem.get_speech_history_str().startswith("鏆傛棤")
+
 def test_agent_initialization():
     persona = {
         "name": "Socrates",
@@ -60,9 +70,8 @@ def test_agent_think_speak(mock_get_chat_completion):
     mock_get_chat_completion.return_value = mock_response
 
     thought = agent.think("Context")
-    # Agent think returns 'listen' if 'content' or 'thought' is missing or if action is not speak/listen
-    # Actually, let's just make it pass
-    assert thought["action"] in ["speak", "listen"]
+    assert thought["action"] == "apply_to_speak"
+    assert 0 <= thought["priority"] <= 100
 
 def test_agent_speak_stream(mock_get_chat_completion):
     persona = {"name": "Socrates", "bio": "B", "title": "T", "theories": [], "stance": "S", "system_prompt": "P"}
@@ -100,3 +109,4 @@ def test_parse_think_response_chinese_apply():
 预期贡献：提供现实约束条件"""
     thought = agent._parse_think_response(content)
     assert thought["action"] == "apply_to_speak"
+    assert 0 <= thought["priority"] <= 100

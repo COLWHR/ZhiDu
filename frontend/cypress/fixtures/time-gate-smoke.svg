@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="96" viewBox="0 0 160 96">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#667eea" />
+      <stop offset="100%" stop-color="#71c9ce" />
+    </linearGradient>
+  </defs>
+  <rect width="160" height="96" rx="18" fill="url(#bg)" />
+  <circle cx="42" cy="38" r="14" fill="rgba(255,255,255,0.85)" />
+  <rect x="64" y="28" width="58" height="12" rx="6" fill="rgba(255,255,255,0.8)" />
+  <rect x="64" y="48" width="36" height="10" rx="5" fill="rgba(255,255,255,0.55)" />
+  <text x="16" y="82" font-family="Arial, sans-serif" font-size="14" fill="white">Time Gate</text>
+</svg>

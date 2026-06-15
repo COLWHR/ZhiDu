@@ -4,15 +4,17 @@ import ForumDetailView from '../ForumDetailView.vue'
 import { createTestingPinia } from '@pinia/testing'
 import { useRoute, useRouter } from 'vue-router'
 
-// Mock useRoute, useRouter
-vi.mock('vue-router', () => ({
-  useRoute: vi.fn(),
-  useRouter: vi.fn(() => ({
+const { mockRouter } = vi.hoisted(() => ({
+  mockRouter: {
     push: vi.fn()
-  }))
+  }
 }))
 
-// Mock useForumWebSocket
+vi.mock('vue-router', () => ({
+  useRoute: vi.fn(),
+  useRouter: vi.fn(() => mockRouter)
+}))
+
 vi.mock('@/composables/useForumWebSocket', () => ({
   useForumWebSocket: vi.fn(() => ({
     connect: vi.fn(),
@@ -21,7 +23,6 @@ vi.mock('@/composables/useForumWebSocket', () => ({
   }))
 }))
 
-// Mock ant-design-vue message
 vi.mock('ant-design-vue', () => ({
   message: {
     success: vi.fn(),
@@ -31,78 +32,65 @@ vi.mock('ant-design-vue', () => ({
 
 describe('ForumDetailView', () => {
   it('renders header buttons correctly', async () => {
-    // Setup route params
-    (useRoute as any).mockReturnValue({
+    ;(useRoute as any).mockReturnValue({
       params: { id: '1' }
     })
 
     const wrapper = mount(ForumDetailView, {
       global: {
-        plugins: [createTestingPinia({
-          createSpy: vi.fn,
-          initialState: {
-            forum: {
-              currentForum: {
-                id: 1,
-                topic: 'Test Forum',
-                status: 'running',
-                start_time: new Date().toISOString(),
-                duration_minutes: 30
+        plugins: [
+          createTestingPinia({
+            createSpy: vi.fn,
+            initialState: {
+              forum: {
+                currentForum: {
+                  id: 1,
+                  topic: 'Test Forum',
+                  status: 'running',
+                  start_time: new Date().toISOString(),
+                  duration_minutes: 30
+                },
+                messages: [],
+                loading: false
               },
-              messages: [],
-              loading: false
-            },
-            auth: { user: { id: 1 } },
-            persona: { personas: [] }
-          }
-        })],
+              auth: { user: { id: 1 } },
+              persona: { personas: [] }
+            }
+          })
+        ],
         stubs: {
-            // Stub complex children
-            MessageList: true,
-            ForumTimer: true,
-            ParticipantList: true,
-            SystemLogConsole: true,
-            // Stub icons
-            ArrowLeftOutlined: true,
-            TeamOutlined: true,
-            DeleteOutlined: true,
-            PlayCircleOutlined: true,
-            CodeOutlined: true,
-            // Stub UI components to simple HTML to verify presence
-            'a-button': { template: '<button class="ant-btn"><slot /></button>' },
-            'a-space': { template: '<div><slot /></div>' },
-            'a-tag': { template: '<span><slot /></span>' },
-            'a-popconfirm': { template: '<div><slot /></div>' },
-            'a-modal': true
+          MessageList: true,
+          ForumTimer: true,
+          ParticipantList: true,
+          SystemLogConsole: true,
+          ArrowLeftOutlined: true,
+          TeamOutlined: true,
+          DeleteOutlined: true,
+          PlayCircleOutlined: true,
+          CodeOutlined: true,
+          UserOutlined: true,
+          UploadOutlined: true,
+          'a-button': { template: '<button class="ant-btn"><slot /></button>' },
+          'a-space': { template: '<div><slot /></div>' },
+          'a-tag': { template: '<span><slot /></span>' },
+          'a-popconfirm': { template: '<div><slot /></div>' },
+          'a-input-search': { template: '<div><slot name="prefix" /><slot /><slot name="suffix" /></div>' },
+          'a-upload': { template: '<div><slot /></div>' },
+          'a-modal': true
         }
       }
     })
 
-    // 1. Verify Header Presence
-    const header = wrapper.find('.forum-header')
-    expect(header.exists()).toBe(true)
-
-    // 2. Verify Topic
+    expect(wrapper.find('.forum-header').exists()).toBe(true)
     expect(wrapper.find('.forum-topic').text()).toBe('Test Forum')
 
-    // 3. Verify Buttons
-    // Back button (first button in left header)
     const backButton = wrapper.find('.header-left button')
     expect(backButton.exists()).toBe(true)
 
-    // Right header buttons
     const rightButtons = wrapper.findAll('.header-right button')
-    // Should have: Participants, Delete, Logs (Start is hidden for running)
-    // 3 buttons expected
-    expect(rightButtons.length).toBe(3)
-    
-    // 4. Verify Z-Index Logic (Static check of class name or style if inline)
-    // Since we used scoped CSS, we can't easily check computed style here without full browser.
-    // But we can verify the structure allows clicking.
-    
-    // Simulate click on back button
+    expect(rightButtons.length).toBe(4)
+
     await backButton.trigger('click')
-    const router = useRouter()
-    expect(router.push).toHaveBeenCalledWith('/forums')
+    expect(mockRouter.push).toHaveBeenCalledWith('/forums')
   })
 })

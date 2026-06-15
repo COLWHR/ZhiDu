@@ -65,7 +65,7 @@ const router = createRouter({
           path: 'time-gate',
           name: 'time-gate',
           component: () => import('@/views/TimeGateView.vue')
-        }
+        },
       ]
     },
     {

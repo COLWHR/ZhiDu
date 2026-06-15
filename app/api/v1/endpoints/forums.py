@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from typing import List, Annotated, Any
-import json
 from app.db.session import get_db
 from app.schemas import (
     ForumCreate, 
@@ -12,7 +11,7 @@ from app.schemas import (
 )
 from app.crud import get_forum, get_forum_messages, get_forum_participants
 from app.crud.crud_system_log import get_system_logs
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_user_ws
 from app.core.websockets import manager
 from app.services.forum_service import ForumService
 from app.db.client import fetch_all, fetch_one, RowObject
@@ -25,6 +24,17 @@ def get_forum_service(db: Any = Depends(get_db)) -> ForumService:
 
 def forum_list_cache_key(user_id: int, skip: int, limit: int):
     return f"forums:list:{user_id}:{skip}:{limit}"
+
+def can_access_forum(current_user: Any, forum: Any) -> bool:
+    return current_user.role in {"admin", "god"} or forum.creator_id == current_user.id
+
+def ensure_forum_access(db: Any, forum_id: int, current_user: Any):
+    forum = get_forum(db, forum_id=forum_id)
+    if forum is None:
+        raise HTTPException(status_code=404, detail="Forum not found")
+    if not can_access_forum(current_user, forum):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return forum
 
 def obj_to_dict(obj):
     if isinstance(obj, list):
@@ -106,11 +116,12 @@ def list_forums(
     return forums
 
 @router.get("/{forum_id}", response_model=ForumResponse)
-def read_forum(forum_id: int, db: Any = Depends(get_db)):
-    db_forum = get_forum(db, forum_id=forum_id)
-    if db_forum is None:
-        raise HTTPException(status_code=404, detail="Forum not found")
-    return db_forum
+def read_forum(
+    forum_id: int,
+    current_user: Annotated[Any, Depends(get_current_user)],
+    db: Any = Depends(get_db)
+):
+    return ensure_forum_access(db, forum_id, current_user)
 
 @router.delete("/{forum_id}")
 async def delete_forum_endpoint(
@@ -118,36 +129,58 @@ async def delete_forum_endpoint(
     current_user: Annotated[Any, Depends(get_current_user)],
     service: ForumService = Depends(get_forum_service)
 ):
-    is_admin = current_user.role == 'admin'
+    is_admin = current_user.role in {'admin', 'god'}
+    forum = ensure_forum_access(service.db, forum_id, current_user)
     success = await service.delete_forum(forum_id, current_user.id, is_admin)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete forum")
         
     # Invalidate list cache for this user
-    cache_service.delete_keys_pattern(f"forums:list:{current_user.id}:*")
+    cache_service.delete_keys_pattern(f"forums:list:{forum.creator_id}:*")
     
     return {"message": "Forum deleted successfully"}
 
 @router.post("/{forum_id}/start")
 async def start_forum_endpoint(
     forum_id: int,
+    current_user: Annotated[Any, Depends(get_current_user)],
+    db: Any = Depends(get_db),
     request: ForumStartRequest = None,
-    current_user: Annotated[Any, Depends(get_current_user)] = None,
     service: ForumService = Depends(get_forum_service)
 ):
-    if current_user is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-        
-    is_admin = current_user.role == 'admin'
+    forum = ensure_forum_access(db, forum_id, current_user)
+    is_admin = current_user.role in {'admin', 'god'}
     ablation_flags = request.ablation_flags if request else None
-    return await service.start_forum(forum_id, current_user.id, is_admin, ablation_flags)
+    result = await service.start_forum(forum_id, current_user.id, is_admin, ablation_flags)
+    cache_service.delete_keys_pattern(f"forums:list:{forum.creator_id}:*")
+    return result
+
+@router.post("/{forum_id}/stop")
+async def stop_forum_endpoint(
+    forum_id: int,
+    current_user: Annotated[Any, Depends(get_current_user)],
+    db: Any = Depends(get_db),
+    service: ForumService = Depends(get_forum_service)
+):
+    forum = ensure_forum_access(db, forum_id, current_user)
+    is_admin = current_user.role in {'admin', 'god'}
+    result = await service.stop_forum(forum_id, current_user.id, is_admin)
+    cache_service.delete_keys_pattern(f"forums:list:{forum.creator_id}:*")
+    return result
 
 @router.post("/{forum_id}/chat", status_code=202)
-async def user_chat(forum_id: int, request: dict):
+async def user_chat(
+    forum_id: int,
+    current_user: Annotated[Any, Depends(get_current_user)],
+    request: dict = None,
+    db: Any = Depends(get_db)
+):
     """
     Inject a user message into the forum loop.
     Request body: {"speaker": "User", "content": "Hello"}
     """
+    ensure_forum_access(db, forum_id, current_user)
+    request = request or {}
     speaker = request.get("speaker", "观众")
     content = request.get("content", "")
     
@@ -162,28 +195,48 @@ async def user_chat(forum_id: int, request: dict):
 async def post_message(
     forum_id: int, 
     message: MessageCreate, 
+    current_user: Annotated[Any, Depends(get_current_user)],
+    db: Any = Depends(get_db),
     service: ForumService = Depends(get_forum_service)
 ):
+    ensure_forum_access(db, forum_id, current_user)
     return await service.post_message(forum_id, message)
 
 @router.get("/{forum_id}/messages", response_model=List[MessageResponse])
-def get_messages(forum_id: int, db: Any = Depends(get_db)):
-    db_forum = get_forum(db, forum_id=forum_id)
-    if not db_forum:
-        raise HTTPException(status_code=404, detail="Forum not found")
+def get_messages(
+    forum_id: int,
+    current_user: Annotated[Any, Depends(get_current_user)],
+    db: Any = Depends(get_db)
+):
+    ensure_forum_access(db, forum_id, current_user)
     return get_forum_messages(db, forum_id=forum_id)
 
 @router.get("/{forum_id}/logs", response_model=List[SystemLogResponse])
-def get_forum_logs(forum_id: int, db: Any = Depends(get_db)):
-    db_forum = get_forum(db, forum_id=forum_id)
-    if not db_forum:
-        raise HTTPException(status_code=404, detail="Forum not found")
+def get_forum_logs(
+    forum_id: int,
+    current_user: Annotated[Any, Depends(get_current_user)],
+    db: Any = Depends(get_db)
+):
+    ensure_forum_access(db, forum_id, current_user)
     return get_system_logs(db, forum_id=forum_id)
 
 @router.websocket("/{forum_id}/ws")
-async def websocket_endpoint(websocket: WebSocket, forum_id: int):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    forum_id: int,
+    current_user: Annotated[Any, Depends(get_current_user_ws)],
+    db: Any = Depends(get_db)
+):
     # print(f"WS: Received connection request for forum {forum_id}")
     try:
+        forum = get_forum(db, forum_id=forum_id)
+        if forum is None:
+            await websocket.close(code=1008)
+            return
+        if not can_access_forum(current_user, forum):
+            await websocket.close(code=1008)
+            return
+
         await manager.connect(websocket, forum_id)
         # print(f"WS: Connection accepted for forum {forum_id}")
     except Exception as e:

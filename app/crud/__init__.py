@@ -15,6 +15,28 @@ def persona_cache_key(pid: int): return f"persona:{pid}"
 def forum_cache_key(fid: int): return f"forum:{fid}"
 def forum_participants_cache_key(fid: int): return f"forum:{fid}:participants"
 
+
+def _maybe_parse_json(value):
+    if not isinstance(value, str):
+        return value
+
+    try:
+        return json.loads(value)
+    except Exception:
+        return value
+
+
+def _normalize_persona(persona):
+    if persona is not None and hasattr(persona, "theories"):
+        persona.theories = _maybe_parse_json(persona.theories)
+    return persona
+
+
+def _normalize_forum(forum):
+    if forum is not None and hasattr(forum, "summary_history"):
+        forum.summary_history = _maybe_parse_json(forum.summary_history)
+    return forum
+
 # --- User ---
 def get_user_by_username(db, username: str):
     # Cache Aside: Read
@@ -80,6 +102,7 @@ def create_persona(db, persona: PersonaCreate, owner_id: int):
             ]
         )
         new_persona = fetch_one(rs)
+        new_persona = _normalize_persona(new_persona)
             
         # Cache Aside: Don't set cache on create. Let the first read populate it.
         # This ensures strict adherence to "DB is source of truth" and lazy loading.
@@ -96,7 +119,7 @@ def get_persona(db, persona_id: int):
         return RowObject(cached)
 
     rs = db.execute("SELECT * FROM personas WHERE id = ?", [persona_id])
-    persona = fetch_one(rs)
+    persona = _normalize_persona(fetch_one(rs))
     if persona:
         cache_service.set_cache(cache_key, persona.__dict__)
     return persona
@@ -120,7 +143,7 @@ def update_persona(db, persona_id: int, updates: PersonaUpdate):
         query = f"UPDATE personas SET {', '.join(set_clauses)} WHERE id = ? RETURNING *"
         
         rs = db_execute_commit(db, query, values)
-        updated = fetch_one(rs)
+        updated = _normalize_persona(fetch_one(rs))
         
         # Sync Strategy: Delete Redis Key on Update
         if updated:
@@ -136,7 +159,7 @@ def delete_persona(db, persona_id: int):
         # Check if exists first to ensure idempotency and clear error
         rs_check = db.execute("SELECT id FROM personas WHERE id = ?", [persona_id])
         if not fetch_one(rs_check):
-            return True # Already deleted or not exists
+            return False
 
         with db_transaction(db) as tx:
             # Manually set persona_id to NULL in messages to avoid FK violation
@@ -241,6 +264,7 @@ def delete_forum(db, forum_id: int):
 def get_forum(db, forum_id: int):
     rs = db.execute("SELECT * FROM forums WHERE id = ?", [forum_id])
     forum = fetch_one(rs)
+    forum = _normalize_forum(forum)
     if not forum:
         return None
         
@@ -302,7 +326,7 @@ def get_forum_participants(db, forum_id: int):
             "name": row.persona_name,
             "title": row.persona_title,
             "bio": row.persona_bio,
-            "theories": row.persona_theories,
+            "theories": _maybe_parse_json(row.persona_theories),
             "stance": row.persona_stance,
             "system_prompt": row.persona_system_prompt,
             "owner_id": row.persona_owner_id,

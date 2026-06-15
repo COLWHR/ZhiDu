@@ -1,0 +1,42 @@
+<view class="page-shell">
+  <view class="card create-card">
+    <view class="section-title">新建论坛</view>
+
+    <view class="form-item">
+      <view class="label">主题</view>
+      <input class="input" placeholder="例如：万有引力定律的应用" value="{{topic}}" bindinput="onTopicInput" />
+    </view>
+
+    <view class="form-item">
+      <view class="label">时长（分钟）</view>
+      <input class="input" type="number" placeholder="30" value="{{duration}}" bindinput="onDurationInput" />
+    </view>
+
+    <view class="form-item">
+      <view class="label">主持人</view>
+      <picker mode="selector" range="{{moderatorNames}}" value="{{moderatorIndex}}" bindchange="onModeratorChange">
+        <view class="picker input">{{moderatorNames[moderatorIndex]}}</view>
+      </picker>
+    </view>
+
+    <view class="form-item">
+      <view class="label">参与者</view>
+      <view class="personas">
+        <view
+          class="persona-item {{item.selected ? 'persona-active' : ''}}"
+          wx:for="{{personas}}"
+          wx:key="id"
+          data-id="{{item.id}}"
+          bindtap="togglePersona"
+        >
+          <view class="persona-name">{{item.name}}</view>
+          <view class="muted persona-desc">{{item.title || item.bio || '点击选择'}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="error" wx:if="{{error}}">{{error}}</view>
+
+    <button class="btn-primary submit-btn" loading="{{loading}}" bindtap="onSubmit">创建并进入</button>
+  </view>
+</view>

@@ -1,41 +1,36 @@
 import pytest
-import os
 from fastapi.testclient import TestClient
-import libsql_client
+from pathlib import Path
 
 from app.db.client import get_db, db_manager
+from app.core.cache import cache_service
 from app.main import app as fastapi_app
 
-# Use a temporary file for SQLite testing
-TEST_DB_PATH = "test_madf.db"
-TEST_DB_URL = f"file:{TEST_DB_PATH}"
-
 @pytest.fixture(scope="function")
-def db():
-    # Setup: Create a fresh database for each test
-    if os.path.exists(TEST_DB_PATH):
-        os.remove(TEST_DB_PATH)
-    
-    # Update db_manager to use test DB
+def db(tmp_path):
+    test_db_path = Path(tmp_path) / "test_madf.db"
+    test_db_url = f"file:{test_db_path}"
+
+    cache_service.delete_keys_pattern("*")
+
     original_url = db_manager.url
-    db_manager.url = TEST_DB_URL
+    original_is_remote = db_manager.is_remote
+    original_is_postgres = db_manager.is_postgres
+
+    db_manager.url = test_db_url
     db_manager.is_remote = False
-    
-    # Initialize schema
+    db_manager.is_postgres = False
+
     db_manager.init_db()
-    
     client = db_manager.get_connection()
     try:
         yield client
     finally:
         client.close()
-        # Teardown: Remove test database
-        if os.path.exists(TEST_DB_PATH):
-            try:
-                os.remove(TEST_DB_PATH)
-            except:
-                pass
         db_manager.url = original_url
+        db_manager.is_remote = original_is_remote
+        db_manager.is_postgres = original_is_postgres
+        cache_service.delete_keys_pattern("*")
 
 @pytest.fixture(scope="function")
 def client(db):

@@ -143,3 +143,15 @@ async def generate_real_personas(
             yield f"data: {json.dumps({'type': 'error', 'content': err_msg}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/generate")
+async def generate_personas_compat(
+    request: GodGenerateRequest,
+    current_user: Annotated[Any, Depends(get_current_user)],
+    db: Any = Depends(get_db)
+):
+    """
+    Backward-compatible alias for older clients and tests.
+    """
+    return await generate_real_personas(request, current_user, db)

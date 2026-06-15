@@ -1,11 +1,13 @@
 import pytest
+from uuid import uuid4
 
 # client is provided by conftest.py
 
 @pytest.fixture
 def auth_header(client):
-    client.post("/api/v1/users/", json={"username": "testuser", "password": "password"})
-    response = client.post("/api/v1/auth/login", data={"username": "testuser", "password": "password"})
+    username = f"testuser_{uuid4().hex[:8]}"
+    client.post("/api/v1/users/", json={"username": username, "password": "password"})
+    response = client.post("/api/v1/auth/login", data={"username": username, "password": "password"})
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 

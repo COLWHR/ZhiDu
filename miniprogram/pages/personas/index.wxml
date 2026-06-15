@@ -1,0 +1,127 @@
+<view class="page">
+  <view class="workshop-header">
+    <view class="header-titles">
+      <text class="main-title">智能体工坊</text>
+      <text class="sub-title">管理你的角色、人设和系统提示词</text>
+    </view>
+    <view class="header-feature-grid">
+      <view class="header-feature-card" bindtap="goNuwa">
+        <view class="header-feature-icon">✧</view>
+        <text class="header-feature-title">女娲</text>
+        <text class="header-feature-desc">智能创建</text>
+      </view>
+      <view class="header-feature-card" bindtap="goAssistant">
+        <view class="header-feature-icon">▦</view>
+        <text class="header-feature-title">助手仓库</text>
+        <text class="header-feature-desc">浏览助手</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="action-grid">
+    <view class="action-card action-card-mint" bindtap="openCreate">
+      <view class="icon-wrap blue-bg"><text class="icon-txt">＋</text></view>
+      <text class="action-name">新建智能体</text>
+    </view>
+    <view class="action-card action-card-dark" bindtap="createPresets">
+      <view class="icon-wrap blue-bg"><text class="icon-txt">★</text></view>
+      <text class="action-name">一键预置</text>
+    </view>
+  </view>
+
+  <view class="search-row">
+    <view class="search-box">
+      <icon type="search" size="14" color="#999"></icon>
+      <input placeholder="搜索智能体" placeholder-class="placeholder-style" value="{{searchText}}" bindinput="onSearchInput" />
+    </view>
+    <view class="filter-btn" bindtap="goForums">论坛</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="empty-state-card">
+    <text class="empty-subtitle">加载中...</text>
+  </view>
+  <view wx:elif="{{filteredPersonas.length === 0}}" class="empty-state-card">
+    <view class="empty-icon-wrapper">
+      <image class="empty-icon-img" src="/assets/icons/chat-bubbles-blue.png" mode="aspectFit"></image>
+    </view>
+    <text class="empty-title">暂无智能体</text>
+    <text class="empty-subtitle">先创建一个智能体，搭建你的专业讨论阵容。</text>
+    <button class="primary-empty-btn" bindtap="openCreate">新建智能体</button>
+  </view>
+  <view wx:else class="agent-list">
+    <view class="agent-card" wx:for="{{filteredPersonas}}" wx:for-index="index" wx:key="id">
+      <view class="card-border-left {{index % 2 === 0 ? 'border-purple' : 'border-green'}}"></view>
+      <view class="agent-row-main">
+        <view class="agent-initial">{{item.name ? item.name.slice(0, 2) : 'AI'}}</view>
+        <view class="agent-content">
+          <view class="card-header">
+            <view class="agent-header-left">
+              <text class="agent-name">{{item.name}}</text>
+              <text class="agent-role">{{item.title || '暂无头衔'}}</text>
+            </view>
+            <view class="tag-status">{{item.is_public ? '公开' : '私有'}}</view>
+          </view>
+          <view class="agent-desc">{{item.bio || '暂无简介'}}</view>
+          <view class="skill-tags">
+            <text class="s-tag tag-purple" wx:for="{{item.theories}}" wx:for-item="tag" wx:key="*this">{{tag}}</text>
+            <text class="s-tag tag-purple" wx:if="{{!item.theories || item.theories.length === 0}}">暂无理论标签</text>
+          </view>
+        </view>
+      </view>
+      <view class="card-footer">
+        <view class="agent-action-btn" data-id="{{item.id}}" bindtap="showDetail"><text class="action-icon">ⓘ</text>详情</view>
+        <view class="agent-action-btn" data-id="{{item.id}}" bindtap="openEdit"><text class="action-icon">✎</text>编辑</view>
+        <view class="agent-action-btn text-red" data-id="{{item.id}}" bindtap="deletePersona"><text class="action-icon">⌫</text>删除</view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showForm}}" class="mask" bindtap="closePanels">
+    <view class="panel form-panel" catchtap="noop">
+      <view class="panel-title form-title">{{editingId ? '编辑智能体' : '新建智能体'}}</view>
+      <view class="field compact-field">
+        <text>名称</text>
+        <input data-key="name" value="{{form.name}}" placeholder="例如：苏格拉底" placeholder-class="form-placeholder" bindinput="onFormInput" />
+      </view>
+      <view class="field compact-field">
+        <text>头衔</text>
+        <input data-key="title" value="{{form.title}}" placeholder="例如：古希腊哲学家" placeholder-class="form-placeholder" bindinput="onFormInput" />
+      </view>
+      <view class="field">
+        <text>简介</text>
+        <textarea class="form-textarea bio-textarea" data-key="bio" value="{{form.bio}}" placeholder="智能体简介" placeholder-class="form-placeholder" bindinput="onFormInput" />
+      </view>
+      <view class="field compact-field">
+        <text>理论标签</text>
+        <input data-key="theoriesStr" value="{{form.theoriesStr}}" placeholder="逗号分隔" placeholder-class="form-placeholder" bindinput="onFormInput" />
+      </view>
+      <view class="field compact-field">
+        <text>立场</text>
+        <input data-key="stance" value="{{form.stance}}" placeholder="核心立场" placeholder-class="form-placeholder" bindinput="onFormInput" />
+      </view>
+      <view class="field">
+        <text>系统提示词</text>
+        <textarea class="form-textarea prompt-textarea" data-key="system_prompt" value="{{form.system_prompt}}" placeholder="System Prompt" placeholder-class="form-placeholder" bindinput="onFormInput" />
+      </view>
+      <view class="panel-actions">
+        <button class="action" bindtap="closePanels">取消</button>
+        <button class="action primary" loading="{{saving}}" bindtap="savePersona">保存</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{detailPersona}}" class="mask" bindtap="closePanels">
+    <view class="panel" catchtap="noop">
+      <view class="panel-title">{{detailPersona.name}}</view>
+      <view class="detail-item"><text class="label">头衔</text><text>{{detailPersona.title}}</text></view>
+      <view class="detail-item"><text class="label">简介</text><text>{{detailPersona.bio}}</text></view>
+      <view class="detail-item"><text class="label">立场</text><text>{{detailPersona.stance}}</text></view>
+      <view class="detail-item"><text class="label">标签</text><text>{{detailPersona.theoriesText}}</text></view>
+      <view class="detail-item"><text class="label">系统提示词</text><text class="mono">{{detailPersona.system_prompt}}</text></view>
+      <view class="panel-actions">
+        <button class="action primary" data-id="{{detailPersona.id}}" bindtap="openEdit">编辑</button>
+        <button class="action" bindtap="closePanels">关闭</button>
+      </view>
+    </view>
+  </view>
+</view>

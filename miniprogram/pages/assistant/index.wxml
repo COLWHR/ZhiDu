@@ -1,0 +1,145 @@
+<view class="container">
+  <view class="header-banner">
+    <view class="tag-badge">助手仓库</view>
+    <view class="main-title">探索发现优质AI智能体</view>
+    <view class="sub-title">一键导入到您的专属工坊，开启智能新体验。</view>
+
+    <view class="stats-row">
+      <view class="stat-box">
+        <text class="stat-num">{{agents.length}}</text>
+        <text class="stat-label">个智能体</text>
+      </view>
+      <view class="stat-box">
+        <text class="stat-num">{{categories.length - 1}}</text>
+        <text class="stat-label">个分类</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="search-filter-row">
+    <view class="search-box">
+      <text class="icon-search">⌕</text>
+      <input
+        class="search-input"
+        placeholder="搜索智能体、分类、提示词"
+        placeholder-class="ph-style"
+        value="{{searchText}}"
+        bindinput="onSearchInput"
+      />
+    </view>
+    <view class="filter-btn">
+      <text class="icon-filter">≡</text>
+      <text>筛选</text>
+    </view>
+  </view>
+
+  <scroll-view class="category-scroll" scroll-x="true" show-scrollbar="false" scroll-with-animation="true">
+    <view class="category-list">
+      <view
+        class="category-item {{currentCategory === item ? 'active' : ''}}"
+        wx:for="{{categories}}"
+        wx:key="*this"
+        data-name="{{item}}"
+        bindtap="onCategoryTap"
+      >
+        {{item}}
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{filteredAgents.length === 0}}" class="empty">
+    没有找到匹配的助手，换个关键词试试。
+  </view>
+
+  <view wx:else class="agent-list">
+    <view class="agent-card" wx:for="{{filteredAgents}}" wx:key="id" data-id="{{item.id}}" bindtap="openDetail">
+      <view class="card-header">
+        <view class="avatar-box">
+          <text class="avatar-icon">{{item.emoji}}</text>
+        </view>
+        <view class="header-info">
+          <view class="agent-name">{{item.name}}</view>
+          <view class="agent-title">{{item.title || '暂无头衔'}}</view>
+        </view>
+      </view>
+
+      <view class="card-desc">{{item.description}}</view>
+
+      <view class="card-tags">
+        <text class="tag" wx:for="{{item.group}}" wx:key="*this">{{item}}</text>
+      </view>
+
+      <view class="card-actions">
+        <button class="btn-action btn-outline-purple" data-id="{{item.id}}" catchtap="openChat">
+          <text class="btn-icon">▣</text>
+          <text>对话</text>
+        </button>
+        <button class="btn-action btn-outline-grey" data-id="{{item.id}}" catchtap="openDetail">
+          <text class="btn-icon">ⓘ</text>
+          <text>详情</text>
+        </button>
+        <button class="btn-action btn-solid-green" data-id="{{item.id}}" loading="{{importing}}" catchtap="importAgentFromCard">
+          <text class="btn-icon">↓</text>
+          <text>导入</text>
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showDetail}}" class="mask" bindtap="closeDetail">
+    <view class="panel" catchtap="noop">
+      <view class="panel-title">{{selectedAgent.name}}</view>
+      <view class="panel-subtitle">{{selectedAgent.title || '暂无头衔'}}</view>
+      <view class="detail">{{selectedAgent.description}}</view>
+      <view class="card-tags panel-tags">
+        <text class="tag" wx:for="{{selectedAgent.group}}" wx:key="*this">{{item}}</text>
+      </view>
+      <view class="panel-section-title">提示词</view>
+      <view class="mono">{{selectedAgent.prompt}}</view>
+      <view class="panel-actions">
+        <button class="btn-action btn-outline-grey" bindtap="closeDetail">关闭</button>
+        <button class="btn-action btn-outline-purple" bindtap="openChat" data-id="{{selectedAgent.id}}">对话</button>
+        <button class="btn-action btn-solid-green" loading="{{importing}}" bindtap="importSelectedAgent">导入</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showChat}}" class="mask" bindtap="closeChat">
+    <view class="panel chat-panel" catchtap="noop">
+      <view class="chat-head">
+        <view>
+          <view class="panel-title">{{selectedAgent.name}}</view>
+          <view class="panel-subtitle">{{selectedAgent.title || '直接调用系统智能体'}}</view>
+        </view>
+        <button class="chat-import-btn" loading="{{importing}}" bindtap="importSelectedAgent">导入</button>
+      </view>
+
+      <scroll-view
+        class="chat-list"
+        scroll-y="true"
+        scroll-with-animation="true"
+        scroll-into-view="{{chatScrollIntoView}}"
+      >
+        <view wx:if="{{chatMessages.length === 0}}" class="chat-empty">先发一句，直接调用这个智能体。</view>
+        <view class="message {{item.role}}" wx:for="{{chatMessages}}" wx:key="id" id="{{item.id}}">
+          <view class="bubble">
+            <view class="speaker">{{item.role === 'user' ? '我' : selectedAgent.name}}</view>
+            <view class="content">{{item.content}}</view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="composer">
+        <textarea
+          class="chat-input"
+          value="{{chatInput}}"
+          placeholder="输入问题，直接让这个智能体回答"
+          auto-height="true"
+          maxlength="-1"
+          bindinput="onChatInput"
+        />
+        <button class="send-btn" loading="{{chatSending}}" bindtap="sendChat">发送</button>
+      </view>
+    </view>
+  </view>
+</view>

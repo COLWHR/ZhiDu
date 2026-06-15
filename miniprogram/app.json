@@ -1,0 +1,56 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/auth/login/index",
+    "pages/auth/register/index",
+    "pages/debug/index",
+    "pages/personas/index",
+    "pages/nuwa/index",
+    "pages/legal/index",
+    "pages/assistant/index",
+    "pages/duxin/index",
+    "pages/forums/list/index",
+    "pages/forums/create/index",
+    "pages/forums/detail/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "ZhiDo",
+    "navigationBarBackgroundColor": "#0f172a",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f4f7f5"
+  },
+  "tabBar": {
+    "color": "#3f4a43",
+    "selectedColor": "#3BB36B",
+    "backgroundColor": "#eaf6e9",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页",
+        "iconPath": "assets/tabbar/home.png",
+        "selectedIconPath": "assets/tabbar/home-active.png"
+      },
+      {
+        "pagePath": "pages/forums/list/index",
+        "text": "论坛",
+        "iconPath": "assets/tabbar/forum.png",
+        "selectedIconPath": "assets/tabbar/forum-active.png"
+      },
+      {
+        "pagePath": "pages/personas/index",
+        "text": "工坊",
+        "iconPath": "assets/tabbar/workshop.png",
+        "selectedIconPath": "assets/tabbar/workshop-active.png"
+      },
+      {
+        "pagePath": "pages/duxin/index",
+        "text": "渡心",
+        "iconPath": "assets/tabbar/duxin.png",
+        "selectedIconPath": "assets/tabbar/duxin-active.png"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

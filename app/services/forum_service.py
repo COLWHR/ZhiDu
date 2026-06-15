@@ -5,6 +5,7 @@ from app.crud import (
     create_message, 
     get_forum_messages, 
     get_persona,
+    update_forum,
     delete_forum,
     get_forum_participants
 )
@@ -51,6 +52,23 @@ class ForumService:
             
         await scheduler.start_forum(forum_id, ablation_flags)
         return {"status": "started", "ablation_flags": ablation_flags}
+
+    async def stop_forum(self, forum_id: int, user_id: int, is_admin: bool = False):
+        forum = get_forum(self.db, forum_id)
+        if not forum:
+            raise HTTPException(status_code=404, detail="Forum not found")
+
+        if forum.creator_id != user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        try:
+            await scheduler.stop_forum(forum_id)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Error stopping forum {forum_id}: {e}")
+
+        updated_forum = update_forum(self.db, forum_id, status="closed")
+        return {"status": "stopped", "forum": updated_forum}
 
     async def delete_forum(self, forum_id: int, user_id: int, is_admin: bool = False):
         forum = get_forum(self.db, forum_id)

@@ -1,0 +1,70 @@
+<view class="page">
+  <view class="hero">
+    <view class="hero-copy">
+      <view class="hero-brand">
+        <image class="hero-brand-icon" src="/assets/images/login-illustration-cutout.png" mode="aspectFill"></image>
+        <text class="hero-brand-name">ZhiDo</text>
+      </view>
+      <view class="title">欢迎回来，{{user.username || '朋友'}}</view>
+      <view class="subtitle">关注你的论坛动态、智能体数量和近期状态</view>
+    </view>
+    <view class="hero-avatar">{{user.username ? user.username.slice(0, 1) : '我'}}</view>
+  </view>
+
+  <view class="stats">
+    <view class="stat-card">
+      <text class="stat-num">{{forumCount}}</text>
+      <text class="stat-label">论坛总数</text>
+    </view>
+    <view class="stat-card">
+      <text class="stat-num">{{personaCount}}</text>
+      <text class="stat-label">智能体数</text>
+    </view>
+    <view class="stat-card">
+      <text class="stat-num">{{activeForumCount}}</text>
+      <text class="stat-label">进行中</text>
+    </view>
+  </view>
+
+  <view class="recent-forum-section">
+    <text class="section-title">最近论坛</text>
+
+    <view wx:if="{{loading}}" class="empty-state-card">
+      <text class="empty-subtitle">加载中...</text>
+    </view>
+
+    <view wx:elif="{{recentForums.length === 0}}" class="empty-state-card">
+      <view class="icon-circle">
+        <image class="empty-icon" src="/assets/icons/chat-bubble.png" mode="aspectFit"></image>
+      </view>
+
+      <view class="empty-text-group">
+        <text class="empty-title">开启你的第一个专业论坛</text>
+        <text class="empty-subtitle">创建论坛，汇聚志同道合的朋友，分享智慧与灵感</text>
+      </view>
+
+      <button class="primary-create-btn" bindtap="handleCreateForum">
+        <image class="btn-icon" src="/assets/icons/add-white.png" mode="aspectFit"></image>
+        <text>创建论坛</text>
+      </button>
+    </view>
+
+    <view wx:else class="forum-list">
+      <view class="forum-item" wx:for="{{recentForums}}" wx:key="id" data-id="{{item.id}}" bindtap="goForumDetail">
+        <view class="forum-icon-box">
+          <image class="forum-icon-img" src="/assets/icons/forum.png" mode="aspectFit"></image>
+        </view>
+        <view class="forum-main">
+          <view class="forum-topic">{{item.topic}}</view>
+          <view class="forum-meta">{{item.statusText}} · {{item.startTimeText}}</view>
+        </view>
+        <view class="forum-status">{{item.statusText}}</view>
+        <view class="forum-arrow">></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="logout-wrapper">
+    <text class="logout-text" bindtap="handleLogout">退出登录</text>
+  </view>
+</view>

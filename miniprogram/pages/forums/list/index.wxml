@@ -1,0 +1,120 @@
+<view class="page-shell">
+  <view class="dashboard-card">
+    <view class="dashboard-header">
+      <view class="header-left">
+        <view class="logo-tile">
+          <image class="forum-logo" src="/assets/images/forum-logo-current.png" mode="aspectFit"></image>
+        </view>
+        <view class="title-group">
+          <text class="cn-title">论坛列表</text>
+        </view>
+      </view>
+
+      <view class="header-right">
+        <view class="icon-btn btn-refresh" bindtap="onRefresh">
+          <image class="icon-small" src="/assets/icons/refresh.png" mode="aspectFit"></image>
+        </view>
+        <view class="icon-btn btn-add" bindtap="goCreate">
+          <image class="icon-small" src="/assets/icons/add-white.png" mode="aspectFit"></image>
+        </view>
+      </view>
+    </view>
+
+    <view class="stats-grid">
+      <view class="stat-item">
+        <text class="stat-num">{{forumSummary.total}}</text>
+        <text class="stat-label">总数</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-num">{{forumSummary.running}}</text>
+        <text class="stat-label">已开始</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-num">{{forumSummary.pending}}</text>
+        <text class="stat-label">未开始</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-num">{{forumSummary.finished}}</text>
+        <text class="stat-label">已结束</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="list-card">
+    <view wx:if="{{loading && forums.length === 0}}" class="empty-state-section">
+      <view class="muted">加载中...</view>
+    </view>
+
+    <view wx:elif="{{forums.length === 0}}" class="empty-state-section">
+      <view class="empty-icon-wrapper">
+        <image class="empty-chat-icon" src="/assets/icons/chat-bubbles-blue.png" mode="aspectFit"></image>
+      </view>
+      <text class="empty-title">暂无论坛</text>
+      <text class="empty-desc">先创建一个论坛，再邀请智能体加入讨论。</text>
+      <button class="primary-btn" bindtap="goCreate">创建论坛</button>
+    </view>
+
+    <block wx:else>
+      <view class="group-card" wx:for="{{forumGroups}}" wx:key="key">
+        <view class="group-header">
+          <view class="group-heading">
+            <view class="group-accent"></view>
+            <view>
+              <view class="group-title">{{item.label}}</view>
+              <view class="group-subtitle">{{item.description}}</view>
+            </view>
+          </view>
+          <view class="group-count">{{item.count}} 个</view>
+        </view>
+
+        <view wx:if="{{item.items.length > 0}}">
+          <view
+            class="forum-item"
+            wx:for="{{item.items}}"
+            wx:for-item="forum"
+            wx:key="id"
+            data-id="{{forum.id}}"
+            bindtap="goDetail"
+          >
+            <view class="forum-top">
+              <view class="forum-topic">{{forum.topic}}</view>
+              <view class="status status-{{forum.status}}">{{forum.statusText}}</view>
+            </view>
+            <view class="forum-bottom">
+            <view class="forum-meta">
+              <text>开始 {{forum.startTimeText}}</text>
+              <text>参与者 {{forum.participantCount}}</text>
+            </view>
+            <view class="forum-actions">
+              <button
+                class="delete-btn"
+                size="mini"
+                data-id="{{forum.id}}"
+                catchtap="handleDelete"
+              >
+                删除
+              </button>
+            </view>
+            </view>
+          </view>
+        </view>
+
+        <view wx:else class="group-empty">
+          <view class="group-empty-text">{{item.emptyText}}</view>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <view wx:if="{{showDeleteConfirm}}" class="delete-modal-mask" catchtap="cancelDelete">
+    <view class="delete-modal" catchtap="noop">
+      <view class="delete-modal-kicker">危险操作</view>
+      <view class="delete-modal-title">确认删除论坛？</view>
+      <view class="delete-modal-desc">删除后将无法恢复，请确认是否删除「{{pendingDeleteForum.topic || '该论坛'}}」。</view>
+      <view class="delete-modal-actions">
+        <button class="modal-btn modal-btn-cancel" bindtap="cancelDelete">取消</button>
+        <button class="modal-btn modal-btn-danger" loading="{{deleting}}" bindtap="confirmDelete">删除</button>
+      </view>
+    </view>
+  </view>
+</view>

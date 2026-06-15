@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 import time
 import traceback
@@ -29,6 +29,167 @@ class ForumScheduler:
     def __init__(self):
         self.running_tasks = {}
         self.user_message_queues = {} # forum_id -> asyncio.Queue
+
+    def _clamp(self, value: int, minimum: int = 0, maximum: int = 100) -> int:
+        return max(minimum, min(maximum, value))
+
+    def _infer_turn_mode(self, messages: list[Any]) -> tuple[str, str]:
+        if not messages:
+            return "synthesis", "默认推进讨论"
+
+        last_content = str(getattr(messages[-1], "content", "") or "").strip()
+        lowered = last_content.lower()
+
+        if "?" in last_content or "？" in last_content or any(
+            phrase in last_content for phrase in ("怎么看", "为什么", "能不能", "可不可以", "怎么理解", "你觉得", "请问")
+        ):
+            return "answer", "上一轮更像观众提问"
+
+        if any(word in lowered for word in ("但是", "不过", "我不同意", "反对", "质疑")):
+            return "challenge", "上一轮出现明显分歧"
+
+        if any(word in last_content for word in ("总结", "复盘", "串联", "归纳", "收束")):
+            return "synthesis", "当前更适合做串联收束"
+
+        if any(word in lowered for word in ("clarify", "澄清", "确认", "边界")):
+            return "clarify", "当前需要先澄清边界"
+
+        return "transition", "需要把讨论自然接到下一点"
+
+    def _extract_terms(self, text: str) -> set[str]:
+        import re
+
+        return set(re.findall(r"[\u4e00-\u9fff]{2,}|[A-Za-z0-9_]{2,}", text or ""))
+
+    def _is_question_turn(self, messages: list[Any]) -> bool:
+        if not messages:
+            return False
+
+        last_content = str(getattr(messages[-1], "content", "") or "")
+        if "?" in last_content or "？" in last_content:
+            return True
+
+        question_phrases = ("怎么看", "为什么", "能不能", "可不可以", "怎么理解", "你觉得", "请问")
+        return any(phrase in last_content for phrase in question_phrases)
+
+    def _estimate_candidate_score(
+        self,
+        agent: ParticipantAgent,
+        thought: dict,
+        messages: list[Any],
+        turn_count: int,
+        batch_spoken_agents: set[ParticipantAgent],
+        turn_mode: str = "synthesis",
+    ) -> int:
+        priority = thought.get("priority", 20)
+        try:
+            score = int(priority)
+        except (TypeError, ValueError):
+            score = 20
+
+        mind = str(thought.get("mind") or "")
+        focus = str(thought.get("focus") or "")
+        style = str(thought.get("style") or "").strip().lower()
+        combined = f"{mind} {focus}"
+        recent_context = " ".join(str(getattr(m, "content", "") or "") for m in messages[-4:])
+        shared_terms = self._extract_terms(combined) & self._extract_terms(recent_context)
+
+        if shared_terms:
+            score += min(12, len(shared_terms) * 4)
+
+        if any(token in combined for token in ("问题", "观众", "追问", "请求", "核心", "回应", "回答")):
+            score += 8
+
+        if self._is_question_turn(messages):
+            if style in {"answer", "clarify"}:
+                score += 12
+            elif style == "support":
+                score += 4
+
+        if turn_mode == "answer" and style == "answer":
+            score += 16
+        elif turn_mode == "clarify" and style == "clarify":
+            score += 14
+        elif turn_mode == "challenge" and style == "challenge":
+            score += 12
+        elif turn_mode == "synthesis" and style == "synthesis":
+            score += 10
+        elif turn_mode == "transition" and style in {"synthesis", "support"}:
+            score += 6
+
+        if style == "synthesis" and turn_count >= 2:
+            score += 5
+        elif style == "challenge" and turn_count >= 3:
+            score += 3
+
+        if agent.name == (getattr(messages[-1], "speaker_name", None) if messages else None):
+            score -= 80
+        if agent in batch_spoken_agents:
+            score -= 18
+
+        last_turn = getattr(agent, "last_spoken_turn", -1)
+        if last_turn >= 0:
+            gap = turn_count - last_turn
+            if gap <= 0:
+                score -= 55
+            elif gap == 1:
+                score -= 15
+            elif gap >= 4:
+                score += min(12, gap * 2)
+        else:
+            score += 4
+
+        if not messages:
+            score += 5
+
+        return self._clamp(score, 0, 100)
+
+    def _choose_fallback_speaker(
+        self,
+        participants: list[ParticipantAgent],
+        messages: list[Any],
+        batch_spoken_agents: set[ParticipantAgent],
+        turn_count: int,
+        fallback_thought: Optional[dict] = None,
+    ) -> Optional[ParticipantAgent]:
+        if not participants:
+            return None
+
+        last_speaker_name = messages[-1].speaker_name if messages else None
+        thought = fallback_thought or {
+            "priority": 35,
+            "mind": "需要有人推动讨论继续前进。",
+            "focus": "推进讨论",
+            "style": "synthesis",
+        }
+
+        ranked = []
+        for agent in participants:
+            if len(participants) > 1 and agent.name == last_speaker_name:
+                continue
+            if agent in batch_spoken_agents and len(batch_spoken_agents) < len(participants):
+                continue
+            score = self._estimate_candidate_score(agent, thought, messages, turn_count, batch_spoken_agents)
+            ranked.append((agent, score))
+
+        if not ranked:
+            for agent in participants:
+                score = self._estimate_candidate_score(agent, thought, messages, turn_count, batch_spoken_agents)
+                ranked.append((agent, score))
+
+        if not ranked:
+            return None
+
+        ranked.sort(
+            key=lambda item: (
+                -item[1],
+                getattr(item[0], "speech_count", 0),
+                getattr(item[0], "last_spoken_turn", -1) if getattr(item[0], "last_spoken_turn", -1) >= 0 else -9999,
+                item[0].name,
+            )
+        )
+        return ranked[0][0]
+
 
     async def push_user_message(self, forum_id: int, user_name: str, content: str):
         """External API calls this to inject user message"""
@@ -81,7 +242,7 @@ class ForumScheduler:
                     stream_id=str(uuid.uuid4())
                 )
                 
-                await self._broadcast_system_log(forum_id, f"观众 [{msg_data['speaker']}] 发言: {msg_data['content']}", "info")
+                await self._broadcast_system_log(forum_id, f"瑙備紬 [{msg_data['speaker']}] 鍙戣█: {msg_data['content']}", "info")
                 
             except Exception as e:
                 logger.error(f"Failed to process user message: {e}")
@@ -267,7 +428,7 @@ class ForumScheduler:
         
         try:
             # Persist the start log
-            await self._broadcast_system_log(forum_id, f"论坛主循环启动... (配置: {ablation_flags})")
+            await self._broadcast_system_log(forum_id, f"璁哄潧涓诲惊鐜惎鍔?.. (閰嶇疆: {ablation_flags})")
             await self._flush_logs_to_db() # FLUSH 1
             
             # Initial setup
@@ -339,10 +500,10 @@ class ForumScheduler:
                     name=moderator_db.name, 
                     system_prompt=moderator_db.system_prompt
                 )
-                await self._broadcast_system_log(forum_id, f"主持人 [{moderator.name}] 已就位")
+                await self._broadcast_system_log(forum_id, f"主持人[{moderator.name}] 已就位")
             else:
                 moderator = ModeratorAgent(theme=forum.topic)
-                await self._broadcast_system_log(forum_id, "系统默认主持人已就位")
+                await self._broadcast_system_log(forum_id, "绯荤粺榛樿涓绘寔浜哄凡灏变綅")
             
             # Speaker Queue for multi-speaker management
             speaker_queue = []
@@ -350,8 +511,8 @@ class ForumScheduler:
             batch_spoken_agents = set()
             
             # Opening
-            await self._broadcast_system_message(forum_id, "论坛开始，主持人正在开场...")
-            await self._broadcast_system_log(forum_id, "主持人正在进行开场白...")
+            await self._broadcast_system_message(forum_id, "璁哄潧寮€濮嬶紝涓绘寔浜烘鍦ㄥ紑鍦?..")
+            await self._broadcast_system_log(forum_id, "涓绘寔浜烘鍦ㄨ繘琛屽紑鍦虹櫧...")
             await self._flush_logs_to_db() # FLUSH 2
             
             await self._moderator_speak(forum_id, moderator, "opening", guests=participants, ablation_flags=ablation_flags)
@@ -437,7 +598,7 @@ class ForumScheduler:
                 # Sync private memories
                 if not ablation_flags.get("no_private_memory"):
                     for agent in participants:
-                        agent.private_memory.speech_history = []
+                        agent.private_memory.clear_speeches()
                         my_msgs = [m for m in messages if m.speaker_name == agent.name]
                         for m in my_msgs:
                             agent.private_memory.add_speech(m.content)
@@ -469,9 +630,9 @@ class ForumScheduler:
                 if ablation_flags.get("no_shared_memory"):
                     if messages:
                         last_m = messages[-1]
-                        context_str = f"【最新发言】\n{last_m.speaker_name}: {last_m.content}"
+                        context_str = f"銆愭渶鏂板彂瑷€銆慭n{last_m.speaker_name}: {last_m.content}"
                     else:
-                        context_str = "(暂无发言)"
+                        context_str = "(鏆傛棤鍙戣█)"
                 else:
                     context_str = shared_memory.get_context_str()
 
@@ -483,7 +644,10 @@ class ForumScheduler:
                     # Double check it's not the moderator by name
                     if last_msg.speaker_name != moderator.name:
                         # Inject narrative description only for this turn
-                        context_str += f"\n\n(此时，台下的观众 {last_msg.speaker_name} 大声说：“{last_msg.content}”)"
+                        context_str += f"\n\n(此时，台下的观众 {last_msg.speaker_name} 大声说：\"{last_msg.content}\")"
+
+                turn_mode, turn_mode_reason = self._infer_turn_mode(messages)
+                context_str += f"\n\n【本轮表达模式建议】\n模式: {turn_mode}\n原因: {turn_mode_reason}"
 
                 # --- NEW: Check for user interruption right BEFORE thinking ---
                 # If a user message arrived while we were summarizing or reconstructing context,
@@ -503,12 +667,12 @@ class ForumScheduler:
                 # No, because context depends on the previous speaker's FULL message.
                 
                 # Broadcast thinking log - Use create_task to not block thinking
-                asyncio.create_task(self._broadcast_system_log(forum_id, "所有参与者正在思考中...", "info"))
+                asyncio.create_task(self._broadcast_system_log(forum_id, "鎵€鏈夊弬涓庤€呮鍦ㄦ€濊€冧腑...", "info"))
                 logger.info(f"Forum {forum_id}: Agents start thinking...")
                 
                 async def agent_think(ag):
                     try:
-                        await self._broadcast_system_log(forum_id, f"嘉宾 [{ag.name}] 正在思考...", "thought")
+                        await self._broadcast_system_log(forum_id, f"鍢夊 [{ag.name}] 姝ｅ湪鎬濊€?..", "thought")
                         
                         if ablation_flags.get("mock_llm"):
                             await asyncio.sleep(1)
@@ -531,7 +695,7 @@ class ForumScheduler:
                         return ag, thought
                     except Exception as e:
                         logger.error(f"Agent {ag.name} think failed: {e}")
-                        await self._broadcast_system_log(forum_id, f"嘉宾 [{ag.name}] 思考失败: {str(e)}", "error")
+                        await self._broadcast_system_log(forum_id, f"鍢夊 [{ag.name}] 鎬濊€冨け璐? {str(e)}", "error")
                         return ag, None
 
                 # Execute thinking in parallel - NO DB LOCK HELD HERE
@@ -613,13 +777,25 @@ class ForumScheduler:
                     if thought:
                         thoughts_map[agent] = thought
                         if thought.get('action') == 'apply_to_speak':
-                             speaker_candidates.append(agent)
+                            score = self._estimate_candidate_score(
+                                agent,
+                                thought,
+                                messages,
+                                turn_count,
+                                batch_spoken_agents,
+                                turn_mode=turn_mode,
+                            )
+                            speaker_candidates.append((agent, score))
 
-                # Update Queue (In-Memory)
-                for agent in speaker_candidates:
-                    if agent not in speaker_queue:
-                         if agent not in batch_spoken_agents or not speaker_queue:
-                             speaker_queue.append(agent)
+                speaker_candidates.sort(
+                    key=lambda item: (
+                        -item[1],
+                        getattr(item[0], "last_spoken_turn", -1) if getattr(item[0], "last_spoken_turn", -1) >= 0 else -9999,
+                        getattr(item[0], "speech_count", 0),
+                        item[0].name,
+                    )
+                )
+                speaker_queue = [agent for agent, _ in speaker_candidates]
 
                 # Select Speaker (In-Memory)
                 if speaker_queue:
@@ -672,41 +848,39 @@ class ForumScheduler:
                     if speaker:
                         batch_spoken_agents.add(speaker)
                 
-                # If no speaker selected from queue (empty or skipped due to consecutive rule)
+                # If no speaker selected from queue, use a deterministic fallback.
                 if not speaker and participants:
-                    remaining = [p for p in participants if p not in batch_spoken_agents]
-                    
-                    # Filter out last speaker from remaining to be safe
-                    last_speaker_name = messages[-1].speaker_name if messages else None
-                    valid_remaining = [p for p in remaining if p.name != last_speaker_name]
-                    
-                    if valid_remaining:
-                        # 随机从valid_remaining中选择一个
-                        import random
-                        speaker = random.choice(valid_remaining)
-                    else:
-                        # Reset batch if everyone spoke or valid ones exhausted
-                        batch_spoken_agents.clear()
-                        
-                        # Fallback round-robin
-                        # Ensure fallback doesn't pick last speaker either
-                        attempts = 0
-                        valid_fallbacks = [p for p in participants if p.name != last_speaker_name]
-                        if valid_fallbacks:
-                             import random
-                             speaker = random.choice(valid_fallbacks)
-                        
-                        # while attempts < len(participants):
-                        #     candidate = participants[fallback_speaker_idx % len(participants)]
-                        #     fallback_speaker_idx += 1
-                        #     attempts += 1
-                        #     if candidate.name != last_speaker_name:
-                        #         speaker = candidate
-                        #         break
-                        
-                        # If still None (e.g. only 1 participant total), then allow consecutive
-                        if not speaker and participants:
-                             speaker = participants[0]
+                    fallback_style = {
+                        "answer": "answer",
+                        "clarify": "clarify",
+                        "challenge": "challenge",
+                        "synthesis": "synthesis",
+                        "transition": "synthesis",
+                    }.get(turn_mode, "synthesis")
+                    fallback_focus = {
+                        "answer": "回应问题",
+                        "clarify": "澄清边界",
+                        "challenge": "指出分歧",
+                        "synthesis": "串联观点",
+                        "transition": "自然转场",
+                    }.get(turn_mode, "串联观点")
+                    fallback_thought = {
+                        "priority": 35,
+                        "mind": f"当前轮次需要有人{fallback_focus}。",
+                        "focus": fallback_focus,
+                        "style": fallback_style,
+                        "action": "apply_to_speak",
+                    }
+                    speaker = self._choose_fallback_speaker(
+                        participants,
+                        messages,
+                        batch_spoken_agents,
+                        turn_count,
+                        fallback_thought=fallback_thought,
+                    )
+
+                    if not speaker and participants:
+                        speaker = participants[0]
 
                     if speaker:
                         batch_spoken_agents.add(speaker)
@@ -742,15 +916,22 @@ class ForumScheduler:
                 queue_names = [a.name for a in speaker_queue]
                 if queue_names:
                     # Optimized: Use background task for log persistence to avoid blocking
-                    asyncio.create_task(self._broadcast_system_log(forum_id, f"当前发言队列: {', '.join(queue_names)}", "info"))
+                    asyncio.create_task(self._broadcast_system_log(forum_id, f"褰撳墠鍙戣█闃熷垪: {', '.join(queue_names)}", "info"))
                 
                 if speaker:
                     # Async log to not block speaking
-                    asyncio.create_task(self._broadcast_system_log(forum_id, f"下一位发言: [{speaker.name}]", "info"))
+                    asyncio.create_task(self._broadcast_system_log(forum_id, f"涓嬩竴浣嶅彂瑷€: [{speaker.name}]", "info"))
                     
                     thought = thoughts_map.get(speaker) or {}
                     
-                    await self._agent_speak(forum_id, speaker, thought, context_str, ablation_flags=ablation_flags)
+                    await self._agent_speak(
+                        forum_id,
+                        speaker,
+                        thought,
+                        context_str,
+                        ablation_flags=ablation_flags,
+                        turn_count=turn_count,
+                    )
                 
                 turn_count += 1
                 
@@ -770,7 +951,7 @@ class ForumScheduler:
             logger.error(f"Forum loop crashed: {e}")
             logger.error(traceback.format_exc())
             try:
-                await self._broadcast_system_log(forum_id, f"论坛异常终止: {str(e)}", "error")
+                await self._broadcast_system_log(forum_id, f"璁哄潧寮傚父缁堟: {str(e)}", "error")
             except:
                 pass
 
@@ -785,7 +966,7 @@ class ForumScheduler:
             forum = get_forum(db, forum_id)
             moderator_id = forum.moderator_id
         
-        # await self._broadcast_system_log(forum_id, f"主持人 [{moderator.name}] 正在构思...", "info")
+        # await self._broadcast_system_log(forum_id, f"涓绘寔浜?[{moderator.name}] 姝ｅ湪鏋勬€?..", "info")
         try:
             if ablation_flags.get("mock_llm"):
                 await asyncio.sleep(1)
@@ -815,18 +996,18 @@ class ForumScheduler:
             if gen:
                 try:
                     # Async log
-                    asyncio.create_task(self._broadcast_system_log(forum_id, f"主持人 [{moderator.name}] 正在构思...", "thought"))
+                    asyncio.create_task(self._broadcast_system_log(forum_id, f"涓绘寔浜?[{moderator.name}] 姝ｅ湪鏋勬€?..", "thought"))
                     
                     first_token = True
                     async for chunk in async_generator_wrapper(gen):
                         # --- NEW: Interruption Check ---
                         if await self._process_user_messages(forum_id):
                             logger.info(f"Moderator {moderator.name} interrupted by user.")
-                            await self._broadcast_system_log(forum_id, f"主持人被观众打断", "warning")
+                            await self._broadcast_system_log(forum_id, f"涓绘寔浜鸿瑙備紬鎵撴柇", "warning")
                             break
                             
                         if first_token:
-                            await self._broadcast_system_log(forum_id, f"主持人 [{moderator.name}] 开始发言...", "speech")
+                            await self._broadcast_system_log(forum_id, f"涓绘寔浜?[{moderator.name}] 寮€濮嬪彂瑷€...", "speech")
                             first_token = False
 
                         if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
@@ -840,7 +1021,7 @@ class ForumScheduler:
                 
         except Exception as e:
             logger.error(f"Moderator speak failed: {e}")
-            await self._broadcast_system_log(forum_id, f"主持人发言生成失败: {str(e)}", "error")
+            await self._broadcast_system_log(forum_id, f"涓绘寔浜哄彂瑷€鐢熸垚澶辫触: {str(e)}", "error")
             return
 
         if content:
@@ -869,7 +1050,7 @@ class ForumScheduler:
             await self._broadcast_message(forum_id, moderator.name, content, None, moderator_id, stream_id, msg.id)
             await self._broadcast_system_log(forum_id, content, "speech", moderator.name)
 
-    async def _agent_speak(self, forum_id: int, agent: ParticipantAgent, thought: dict, context: str, ablation_flags: dict = None):
+    async def _agent_speak(self, forum_id: int, agent: ParticipantAgent, thought: dict, context: str, ablation_flags: dict = None, turn_count: int = None):
         content = ""
         stream_id = str(uuid.uuid4())
         ablation_flags = ablation_flags or {}
@@ -891,7 +1072,7 @@ class ForumScheduler:
             
             if gen:
                 try:
-                    # await self._broadcast_system_log(forum_id, f"嘉宾 [{agent.name}] 正在构思...", "thought")
+                    # await self._broadcast_system_log(forum_id, f"鍢夊 [{agent.name}] 姝ｅ湪鏋勬€?..", "thought")
                     
                     first_token = True
                     start_speak_time = time.time()
@@ -908,7 +1089,7 @@ class ForumScheduler:
                         if first_token:
                             ttft = time.time() - start_speak_time
                             logger.info(f"Agent {agent.name} TTFT: {ttft:.2f}s")
-                            await self._broadcast_system_log(forum_id, f"嘉宾 [{agent.name}] 开始发言...", "speech")
+                            await self._broadcast_system_log(forum_id, f"鍢夊 [{agent.name}] 寮€濮嬪彂瑷€...", "speech")
                             first_token = False
                             
                         if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
@@ -923,14 +1104,14 @@ class ForumScheduler:
                             await self._broadcast_chunk(forum_id, agent.name, token, persona_id, None, stream_id, thought=send_thought)
                 except Exception as e:
                     logger.error(f"Error consuming agent generator: {e}")
-                    await self._broadcast_system_log(forum_id, f"嘉宾 [{agent.name}] 发言中断: {str(e)}", "error")
+                    await self._broadcast_system_log(forum_id, f"鍢夊 [{agent.name}] 鍙戣█涓柇: {str(e)}", "error")
             else:
                 logger.warning(f"Agent {agent.name} speak returned None")
-                content = "(沉默)"
+                content = "(娌夐粯)"
                 await self._broadcast_system_log(forum_id, f"嘉宾 [{agent.name}] 放弃发言 (API无响应或返回空)", "warning")
         except Exception as e:
             logger.error(f"Agent {agent.name} speak failed: {e}")
-            await self._broadcast_system_log(forum_id, f"嘉宾 [{agent.name}] 发言生成失败: {str(e)}", "error")
+            await self._broadcast_system_log(forum_id, f"鍢夊 [{agent.name}] 鍙戣█鐢熸垚澶辫触: {str(e)}", "error")
             return
 
         if content:
@@ -947,6 +1128,10 @@ class ForumScheduler:
                     thought=thought_content,
                     turn_count=0
                 ))
+
+            if turn_count is not None:
+                agent.last_spoken_turn = turn_count
+            agent.speech_count += 1
             
             await self._broadcast_message(forum_id, agent.name, content, persona_id, None, stream_id, msg.id, thought=thought_content)
             await self._broadcast_system_log(forum_id, content, "speech", agent.name)

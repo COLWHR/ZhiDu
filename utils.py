@@ -17,11 +17,126 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# ZhipuAI client with timeout configuration
-client = ZhipuAI(
-    api_key=settings.final_api_key,
-    base_url=settings.BASE_URL
-)
+
+def _configured_api_key() -> str:
+    return (
+        settings.API_KEY
+        or os.environ.get("API_KEY")
+        or os.environ.get("ZHIPUAI_API_KEY")
+        or ""
+    ).strip()
+
+
+def _looks_like_placeholder_api_key(key: str) -> bool:
+    normalized = key.strip().lower()
+    if not normalized:
+        return False
+
+    placeholder_tokens = (
+        "replace_with_your_zhipu_api_key",
+        "your_zhipu_api_key",
+        "your_api_key",
+        "your key",
+        "change_me",
+        "placeholder",
+        "example_key",
+        "dummy_key",
+    )
+    return (
+        normalized.startswith("replace_with")
+        or normalized.startswith("your_")
+        or normalized.startswith("xxx")
+        or any(token in normalized for token in placeholder_tokens)
+    )
+
+
+def _build_llm_client() -> ZhipuAI:
+    api_key = _configured_api_key()
+    if not api_key:
+        raise LLMServiceError(
+            kind="auth",
+            message="未配置 API_KEY，请在 .env 或环境变量中填入真实的智谱 API Key。",
+        )
+
+    if _looks_like_placeholder_api_key(api_key):
+        raise LLMServiceError(
+            kind="auth",
+            message="API_KEY 仍是示例占位符，请替换为真实密钥后再试。",
+        )
+
+    return ZhipuAI(
+        api_key=api_key,
+        base_url=settings.final_base_url,
+    )
+
+
+class LLMServiceError(RuntimeError):
+    """Structured error for upstream LLM failures."""
+
+    def __init__(self, kind: str, message: str, *, status_code: int | None = None, details: str | None = None):
+        super().__init__(message)
+        self.kind = kind
+        self.message = message
+        self.status_code = status_code
+        self.details = details
+
+    @classmethod
+    def from_exception(cls, exc: Exception, *, timeout: int | None = None) -> "LLMServiceError":
+        raw = str(exc).strip() or exc.__class__.__name__
+        lowered = raw.lower()
+
+        def has(*tokens: str) -> bool:
+            return any(token in raw or token in lowered for token in tokens)
+
+        if has("401", "unauthorized", "身份验证失败", "api key", "apikey", "invalid api key", "invalid api_key"):
+            return cls(
+                kind="auth",
+                message="上游模型鉴权失败（401 Unauthorized / 身份验证失败）",
+                status_code=401,
+                details=raw,
+            )
+
+        if has("403", "forbidden", "无权限", "permission denied"):
+            return cls(
+                kind="permission",
+                message="上游模型权限不足（403 Forbidden）",
+                status_code=403,
+                details=raw,
+            )
+
+        if has("404", "not found", "模型不存在", "资源未找到"):
+            return cls(
+                kind="not_found",
+                message="上游模型或接口地址未找到（404 Not Found）",
+                status_code=404,
+                details=raw,
+            )
+
+        if has("429", "rate limit", "too many requests", "限流", "请求过于频繁"):
+            return cls(
+                kind="rate_limit",
+                message="上游模型触发限流（429 Too Many Requests）",
+                status_code=429,
+                details=raw,
+            )
+
+        if has("timeout", "timed out", "超时"):
+            timeout_suffix = f"（{timeout}s）" if timeout else ""
+            return cls(
+                kind="timeout",
+                message=f"上游模型请求超时{timeout_suffix}",
+                details=raw,
+            )
+
+        if has("connection", "connect", "network", "unreachable", "refused", "dns"):
+            return cls(
+                kind="network",
+                message="无法连接到上游模型服务，请检查网络或 BASE_URL",
+                details=raw,
+            )
+
+        return cls(kind="upstream_error", message=f"上游模型调用失败：{raw}", details=raw)
+
 
 def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, timeout=30, callback=None, raise_error=False, use_vision=False):
     """
@@ -88,8 +203,16 @@ def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, 
             attempt += 1
             if attempt < max_retries:
                 time.sleep(1 + attempt)
+
+        if last_error:
+            logger.warning(
+                "Vision API failed after %s attempts; falling back to text model: %s",
+                max_retries,
+                last_error,
+            )
     
     # 普通文本请求或火山引擎不可用，使用智谱AI
+    client = _build_llm_client()
     while attempt < max_retries:
         try:
             if stream:
@@ -148,7 +271,12 @@ def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, 
     logger.error(f"Chat completion failed after {max_retries} attempts. Last error: {last_error}")
     
     if raise_error and last_error:
-        raise last_error
+        raise LLMServiceError.from_exception(last_error, timeout=timeout)
+    if raise_error:
+        raise LLMServiceError(
+            kind="empty_response",
+            message="上游模型未返回有效响应",
+        )
         
     return None
 
@@ -198,14 +326,48 @@ def parse_json_from_response(content):
         except Exception:
             pass
 
+        def escape_unescaped_quotes(raw: str) -> str:
+            result = []
+            in_string = False
+            i = 0
+            while i < len(raw):
+                char = raw[i]
+                if char == "\\" and in_string and i + 1 < len(raw):
+                    result.append(char)
+                    result.append(raw[i + 1])
+                    i += 2
+                    continue
+                if char == '"':
+                    if not in_string:
+                        in_string = True
+                        result.append(char)
+                    else:
+                        j = i + 1
+                        while j < len(raw) and raw[j].isspace():
+                            j += 1
+                        if j == len(raw) or raw[j] in {',', '}', ']', ':'}:
+                            in_string = False
+                            result.append(char)
+                        else:
+                            result.append('\\"')
+                    i += 1
+                    continue
+                result.append(char)
+                i += 1
+            return ''.join(result)
+
         # Cleanup: remove trailing commas, comments
         try:
             # Remove single-line comments // ...
             content = re.sub(r'//.*', '', content)
             # Remove trailing commas before } or ]
             content = re.sub(r',(\s*[}\]])', r'\1', content)
-            
-            return json.loads(content)
+
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                repaired = escape_unescaped_quotes(content)
+                return json.loads(repaired)
         except Exception:
             pass
             

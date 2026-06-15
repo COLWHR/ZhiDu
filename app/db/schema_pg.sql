@@ -109,3 +109,72 @@ CREATE TABLE IF NOT EXISTS system_logs (
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (forum_id) REFERENCES forums(id) ON DELETE CASCADE
 );
+
+-- Duxin Sessions table
+CREATE TABLE IF NOT EXISTS duxin_sessions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    mode VARCHAR(50) NOT NULL DEFAULT 'support',
+    risk_level VARCHAR(10) NOT NULL DEFAULT 'L0',
+    status VARCHAR(50) NOT NULL DEFAULT 'active',
+    summary TEXT,
+    latest_message_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Duxin Messages table
+CREATE TABLE IF NOT EXISTS duxin_messages (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    agent_name VARCHAR(255),
+    content TEXT NOT NULL,
+    risk_level VARCHAR(10) NOT NULL DEFAULT 'L0',
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES duxin_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Duxin Memories table
+CREATE TABLE IF NOT EXISTS duxin_memories (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    memory_type VARCHAR(50) NOT NULL,
+    content TEXT NOT NULL,
+    source_session_id INTEGER,
+    user_editable BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (source_session_id) REFERENCES duxin_sessions(id) ON DELETE SET NULL
+);
+
+-- Duxin Risk Events table
+CREATE TABLE IF NOT EXISTS duxin_risk_events (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    session_id INTEGER NOT NULL,
+    risk_level VARCHAR(10) NOT NULL,
+    signals JSONB DEFAULT '[]'::jsonb,
+    action_taken TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES duxin_sessions(id) ON DELETE CASCADE
+);
+
+-- Duxin Safety Feedback table
+CREATE TABLE IF NOT EXISTS duxin_safety_feedback (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    session_id INTEGER,
+    rating VARCHAR(50) NOT NULL,
+    content TEXT,
+    risk_level VARCHAR(10),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES duxin_sessions(id) ON DELETE SET NULL
+);

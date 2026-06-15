@@ -1,0 +1,59 @@
+.create-card {
+  padding: 30rpx;
+}
+
+.form-item {
+  margin-bottom: 24rpx;
+}
+
+.label {
+  font-size: 26rpx;
+  color: #374151;
+  margin-bottom: 12rpx;
+  font-weight: 600;
+}
+
+.picker {
+  display: flex;
+  align-items: center;
+  color: #1a1d1e;
+}
+
+.personas {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.persona-item {
+  padding: 20rpx;
+  border-radius: 20rpx;
+  background: #f8faf8;
+  border: 2rpx solid transparent;
+}
+
+.persona-active {
+  border-color: #3bb36b;
+  background: #ebf7ee;
+}
+
+.persona-name {
+  font-weight: 600;
+  font-size: 28rpx;
+  color: #1a1d1e;
+}
+
+.persona-desc {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+}
+
+.error {
+  color: #dc2626;
+  background: #fef2f2;
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 20rpx;
+  font-size: 26rpx;
+}
+

@@ -1,48 +1,43 @@
-# 获取智谱 AI API Key 详细步骤
+# 获取模型 API Key 的方法
 
-## 步骤 1: 访问智谱 AI 开放平台
+本文以智谱开放平台为例，说明如何获取可用的模型服务密钥。
 
-1. 打开浏览器，访问智谱 AI 开放平台：[https://open.bigmodel.cn/](https://open.bigmodel.cn/)
+## 1. 注册和登录
 
-2. 点击页面右上角的「注册」按钮，创建一个新账号（如果已有账号则直接登录）。
+1. 打开智谱开放平台：<https://open.bigmodel.cn/>
+2. 注册账号或直接登录已有账号
 
-## 步骤 2: 登录并进入控制台
+## 2. 进入控制台
 
-1. 使用注册的账号登录智谱 AI 开放平台。
+1. 登录后进入控制台
+2. 找到 API Key 或密钥管理入口
 
-2. 登录后，点击页面右上角的「控制台」按钮，进入开发者控制台。
+## 3. 创建密钥
 
-## 步骤 3: 获取 API Key
+1. 点击创建 API Key
+2. 复制生成的密钥并妥善保存
+3. 不要把密钥提交到仓库或公开分享
 
-1. 在控制台页面，找到左侧导航栏中的「API 密钥」或类似选项。
+## 4. 配置到项目中
 
-2. 点击「创建 API 密钥」按钮，系统会生成一个新的 API Key。
-
-3. 复制生成的 API Key，妥善保存。
-
-## 步骤 4: 配置环境变量
-
-1. 在项目根目录下，复制 `.env.example` 文件并重命名为 `.env`。
-
-2. 编辑 `.env` 文件，将获取到的 API Key 填入 `API_KEY` 字段。
+在项目根目录创建 `.env`，把密钥写入 `API_KEY`：
 
 ```ini
-# LLM API Configuration
-API_KEY=your_glm_api_key  # 替换为你的 API Key
-MODEL_NAME=glm-4.6
+API_KEY=your_api_key_here
+MODEL_NAME=glm-4.5
 BASE_URL=https://open.bigmodel.cn/api/paas/v4/
-
-# Search API Configuration
-SERPAPI_API_KEY=your_serpapi_key
-DATABASE_URL=
+SECRET_KEY=your_secret_key
 ```
 
-## 注意事项
+说明：
 
-1. API Key 是敏感信息，请不要分享给他人。
+- `API_KEY` 必填
+- `MODEL_NAME` 默认使用 `glm-4.5`
+- 如果你的账号已经开通对应能力，也可以改成 `glm-4.6`
 
-2. 智谱 AI 可能会对 API 调用次数进行限制，请注意查看相关的使用条款。
+## 5. 常见问题
 
-3. 如果遇到 API 调用失败的情况，请检查 API Key 是否正确，以及是否有足够的配额。
+- 如果接口返回 401，优先确认密钥是否复制正确
+- 如果提示额度不足，检查账号余额或模型配额
+- 如果服务报错，确认 `BASE_URL` 是否与平台要求一致
 
-获取 API Key 后，请通知我，我将继续指导您完成本地源码启动的后续步骤。

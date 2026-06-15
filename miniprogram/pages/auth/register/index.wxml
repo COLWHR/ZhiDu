@@ -1,0 +1,81 @@
+<view class="register-container">
+  <view class="header-section">
+    <image class="hero-image" src="/assets/images/login-illustration-cutout.png" mode="aspectFit"></image>
+    <text class="main-title">创建您的账号</text>
+    <text class="sub-title">设置账号与密码，开启智能体验</text>
+  </view>
+
+  <view class="form-section">
+    <view class="input-group {{activeField === 'username' ? 'focused' : ''}}">
+      <input
+        class="form-input"
+        type="text"
+        placeholder="请输入账号名称（由字母或数字组成）"
+        placeholder-class="ph-style"
+        maxlength="20"
+        value="{{username}}"
+        bindinput="onUsernameInput"
+        bindfocus="onFieldFocus"
+        bindblur="onFieldBlur"
+        data-field="username"
+      />
+    </view>
+
+    <view class="input-group {{activeField === 'password' ? 'focused' : ''}}">
+      <input
+        class="form-input"
+        password="{{!isPasswordVisible}}"
+        placeholder="请设置登录密码"
+        placeholder-class="ph-style"
+        value="{{password}}"
+        bindinput="onPasswordInput"
+        bindfocus="onFieldFocus"
+        bindblur="onFieldBlur"
+        data-field="password"
+      />
+      <view class="eye-icon" bindtap="togglePassword">
+        <text>{{isPasswordVisible ? '眼' : '目'}}</text>
+      </view>
+    </view>
+
+    <view class="input-group {{activeField === 'confirmPassword' ? 'focused' : ''}}">
+      <input
+        class="form-input"
+        password="{{!isConfirmPasswordVisible}}"
+        placeholder="请再次输入密码确认"
+        placeholder-class="ph-style"
+        value="{{confirmPassword}}"
+        bindinput="onConfirmPasswordInput"
+        bindfocus="onFieldFocus"
+        bindblur="onFieldBlur"
+        data-field="confirmPassword"
+      />
+      <view class="eye-icon" bindtap="toggleConfirmPassword">
+        <text>{{isConfirmPasswordVisible ? '眼' : '目'}}</text>
+      </view>
+    </view>
+
+    <view class="error" wx:if="{{error}}">{{error}}</view>
+  </view>
+
+  <view class="agreement-section">
+    <view class="checkbox {{isAgreed ? 'checked' : ''}}" bindtap="toggleAgreement">
+      <text wx:if="{{isAgreed}}" class="check-mark">✓</text>
+    </view>
+    <view class="agreement-text">
+      <text>我已阅读并同意</text>
+      <text class="link-text" bindtap="goUserProtocol">《用户协议》</text>
+      <text>和</text>
+      <text class="link-text" bindtap="goPrivacyPolicy">《隐私政策》</text>
+    </view>
+  </view>
+
+  <view class="action-section">
+    <button class="btn-primary" loading="{{loading}}" bindtap="handleRegister">注 册</button>
+
+    <view class="footer-link">
+      <text class="text-grey">已有账号？</text>
+      <text class="text-blue" bindtap="goToLogin">去登录</text>
+    </view>
+  </view>
+</view>

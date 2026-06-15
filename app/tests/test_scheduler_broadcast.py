@@ -23,13 +23,11 @@ class TestForumScheduler(unittest.TestCase):
         
         # Mock speak to return a generator of chunks
         def mock_speak(*args):
-            chunks = []
             for char in "Hello World":
                 chunk = MagicMock()
                 chunk.choices = [MagicMock()]
                 chunk.choices[0].delta.content = char
-                chunks.append(chunk)
-            return chunks
+                yield chunk
             
         agent.speak = mock_speak
         
@@ -44,7 +42,7 @@ class TestForumScheduler(unittest.TestCase):
 
             # Run
             import asyncio
-            asyncio.run(self.scheduler._agent_speak(mock_db, forum_id, agent, thought, context))
+            asyncio.run(self.scheduler._agent_speak(forum_id, agent, thought, context))
             
             # Verify broadcasts
             # We expect len("Hello World") calls to broadcast_chunk

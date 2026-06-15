@@ -1,0 +1,88 @@
+<view class="detail-page">
+  <view class="forum-overview">
+    <view class="forum-hero card">
+      <view class="hero-content">
+        <view class="forum-detail-icon">
+          <image class="forum-detail-icon-img" src="/assets/icons/forum.png" mode="aspectFit"></image>
+        </view>
+        <view class="hero-topline">
+          <view class="status status-{{forum.status}}">{{statusText}}</view>
+          <view class="trash-action" bindtap="handleDelete">删除</view>
+        </view>
+        <view class="topic">{{forum.topic || '论坛详情'}}</view>
+        <view class="meta-line">
+          <text class="meta-text">参与者 {{participantLabels.length > 0 ? participantLabels.length - 1 : 0}}</text>
+        </view>
+      </view>
+
+      <button
+        wx:if="{{forum.status === 'pending'}}"
+        class="start-btn"
+        loading="{{starting}}"
+        bindtap="handleStart"
+      >
+        开始论坛
+      </button>
+    </view>
+
+    <view class="detail-summary">
+      <view class="summary-item summary-time">
+        <text class="summary-value">{{forumStartTimeText}}</text>
+        <text class="summary-label">开始时间</text>
+      </view>
+      <view class="summary-item summary-duration">
+        <text class="summary-value">{{forum.duration_minutes || 0}} 分钟</text>
+        <text class="summary-label">论坛时长</text>
+      </view>
+      <view class="summary-item summary-count">
+        <text class="summary-value">{{messages.length}}</text>
+        <text class="summary-label">消息数</text>
+      </view>
+    </view>
+  </view>
+
+  <scroll-view class="message-list" scroll-y="true" scroll-with-animation="true" scroll-into-view="{{scrollIntoView}}">
+    <view class="message-meta" wx:if="{{loading && messages.length === 0}}">
+      正在加载消息...
+    </view>
+
+    <view class="message {{item.isSelf ? 'message-self' : 'message-other'}}" wx:for="{{messages}}" wx:key="key" id="{{item.key}}">
+      <view class="avatar {{item.isSelf ? 'avatar-self' : 'avatar-other'}}">{{item.avatarLabel}}</view>
+      <view class="bubble-wrap">
+        <view class="speaker">{{item.speaker_name}}</view>
+        <view class="bubble {{item.isSelf ? 'bubble-self' : 'bubble-other'}}">
+          <text wx:if="{{item.type !== 'image'}}">{{item.expanded ? item.content : item.previewContent}}</text>
+          <image wx:else class="bubble-image" mode="widthFix" src="{{item.content}}"></image>
+        </view>
+        <view
+          wx:if="{{item.isLong && item.type !== 'image'}}"
+          class="detail-toggle"
+          data-key="{{item.key}}"
+          bindtap="toggleMessageDetail"
+        >
+          {{item.expanded ? '收起' : '详情'}}
+        </view>
+        <view class="message-state" wx:if="{{item.pending}}">发送中...</view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="composer-panel">
+    <view class="composer">
+      <picker mode="selector" range="{{participantLabels}}" value="{{participantPickerIndex}}" bindchange="onParticipantChange">
+        <view class="mode-btn">@</view>
+      </picker>
+      <input
+        class="composer-input"
+        placeholder-class="composer-placeholder"
+        placeholder="{{selectedPersonaId === 0 ? '发给全体参与者...' : '发给 ' + selectedPersonaName + '...'}}"
+        value="{{inputValue}}"
+        bindinput="onInput"
+        confirm-type="send"
+        focus="{{inputFocused}}"
+        bindconfirm="onSend"
+      />
+      <button class="send-btn" loading="{{sending}}" bindtap="onSend">↑</button>
+    </view>
+  </view>
+</view>
