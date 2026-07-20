@@ -1,5 +1,5 @@
-from typing import List, Optional, Any, Union, Dict
-from pydantic import BaseModel, ConfigDict, field_validator
+from typing import List, Optional, Any, Union, Dict, Literal
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import datetime
 import json
 
@@ -32,11 +32,15 @@ class PersonaBase(BaseModel):
     name: str
     title: Optional[str] = None
     bio: Optional[str] = None
-    theories: Optional[List[str]] = [] 
+    theories: Optional[List[str]] = Field(default_factory=list)
     stance: Optional[str] = None
     system_prompt: Optional[str] = None
     is_public: bool = False
     avatar: Optional[str] = None
+    skills: List[str] = Field(default_factory=lambda: ["chat.reply"])
+    skill_policy: Dict[str, Any] = Field(default_factory=dict)
+    modalities: List[str] = Field(default_factory=lambda: ["text"])
+    capabilities_version: int = 1
 
 class PersonaCreate(PersonaBase):
     pass
@@ -50,18 +54,25 @@ class PersonaUpdate(BaseModel):
     system_prompt: Optional[str] = None
     is_public: Optional[bool] = None
     avatar: Optional[str] = None
+    skills: Optional[List[str]] = None
+    skill_policy: Optional[Dict[str, Any]] = None
+    modalities: Optional[List[str]] = None
+    capabilities_version: Optional[int] = None
 
 class PersonaResponse(PersonaBase):
     id: int
     owner_id: int
     created_at: datetime
-    theories: Optional[Union[List[str], str]] = []
+    theories: Optional[Union[List[str], str]] = Field(default_factory=list)
+    skills: Optional[Union[List[str], str]] = Field(default_factory=list)
+    modalities: Optional[Union[List[str], str]] = Field(default_factory=list)
+    skill_policy: Optional[Union[Dict[str, Any], str]] = Field(default_factory=dict)
 
     model_config = ConfigDict(from_attributes=True)
 
-    @field_validator('theories', mode='before')
+    @field_validator("theories", "skills", "modalities", mode="before")
     @classmethod
-    def parse_theories(cls, v: Any) -> List[str]:
+    def parse_json_list(cls, v: Any) -> List[str]:
         if isinstance(v, str):
             try:
                 parsed = json.loads(v)
@@ -72,6 +83,203 @@ class PersonaResponse(PersonaBase):
                 return []
         elif v is None:
             return []
+        return v
+
+    @field_validator("skill_policy", mode="before")
+    @classmethod
+    def parse_skill_policy(cls, v: Any) -> Dict[str, Any]:
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, dict):
+                    return parsed
+                return {}
+            except json.JSONDecodeError:
+                return {}
+        if v is None:
+            return {}
+        return v
+
+
+class SkillBase(BaseModel):
+    skill_key: str
+    name: str
+    category: str = "general"
+    description: Optional[str] = None
+    input_modalities: List[str] = Field(default_factory=list)
+    output_types: List[str] = Field(default_factory=list)
+    required_models: List[str] = Field(default_factory=list)
+    required_tools: List[str] = Field(default_factory=list)
+    params_schema: Dict[str, Any] = Field(default_factory=dict)
+    permission_scope: List[str] = Field(default_factory=list)
+    cost_level: str = "low"
+    status: str = "active"
+    source: Optional[str] = None
+    source_url: Optional[str] = None
+    source_slug: Optional[str] = None
+    source_rank: Optional[int] = None
+    source_owner: Optional[str] = None
+    source_version: Optional[str] = None
+    icon_url: Optional[str] = None
+    downloads: int = 0
+    installs: int = 0
+    stars: int = 0
+    score: Optional[float] = None
+    sub_categories: List[str] = Field(default_factory=list)
+    synced_at: Optional[str] = None
+    security_reports: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SkillCreate(SkillBase):
+    pass
+
+
+class SkillUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    input_modalities: Optional[List[str]] = None
+    output_types: Optional[List[str]] = None
+    required_models: Optional[List[str]] = None
+    required_tools: Optional[List[str]] = None
+    params_schema: Optional[Dict[str, Any]] = None
+    permission_scope: Optional[List[str]] = None
+    cost_level: Optional[str] = None
+    status: Optional[str] = None
+
+
+class SkillResponse(SkillBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AttachmentBase(BaseModel):
+    owner_id: int
+    file_name: str
+    mime_type: Optional[str] = None
+    size: Optional[int] = None
+    kind: Optional[str] = None
+    storage_url: str
+    preview_url: Optional[str] = None
+    sha256: Optional[str] = None
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AttachmentCreate(AttachmentBase):
+    persona_id: Optional[int] = None
+    chat_message_id: Optional[int] = None
+    session_id: Optional[int] = None
+
+
+class AttachmentResponse(AttachmentBase):
+    id: int
+    persona_id: Optional[int] = None
+    chat_message_id: Optional[int] = None
+    session_id: Optional[int] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("meta", mode="before")
+    @classmethod
+    def parse_meta(cls, v: Any) -> Dict[str, Any]:
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                return {}
+        if v is None:
+            return {}
+        return v
+
+
+class ArtifactBase(BaseModel):
+    owner_id: int
+    artifact_type: str
+    file_name: str
+    mime_type: Optional[str] = None
+    storage_url: str
+    preview_url: Optional[str] = None
+    version: int = 1
+    status: str = "ready"
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ArtifactCreate(ArtifactBase):
+    persona_id: Optional[int] = None
+    task_run_id: Optional[int] = None
+
+
+class ArtifactResponse(ArtifactBase):
+    id: int
+    persona_id: Optional[int] = None
+    task_run_id: Optional[int] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("meta", mode="before")
+    @classmethod
+    def parse_meta(cls, v: Any) -> Dict[str, Any]:
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                return {}
+        if v is None:
+            return {}
+        return v
+
+
+class TaskRunBase(BaseModel):
+    persona_id: Optional[int] = None
+    skill_key: Optional[str] = None
+    session_id: Optional[int] = None
+    status: str = "queued"
+    progress: int = 0
+    input_payload: Dict[str, Any] = Field(default_factory=dict)
+    output_payload: Dict[str, Any] = Field(default_factory=dict)
+    error_message: Optional[str] = None
+
+
+class TaskRunCreate(TaskRunBase):
+    owner_id: int
+
+
+class TaskRunUpdate(BaseModel):
+    status: Optional[str] = None
+    progress: Optional[int] = None
+    output_payload: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+
+
+class TaskRunResponse(TaskRunBase):
+    id: int
+    owner_id: int
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("input_payload", "output_payload", mode="before")
+    @classmethod
+    def parse_payloads(cls, v: Any) -> Dict[str, Any]:
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                return {}
+        if v is None:
+            return {}
         return v
 
 # --- Moderator Schemas ---

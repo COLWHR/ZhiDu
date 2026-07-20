@@ -218,7 +218,7 @@ const handleClickMinimized = () => {
 
 .timer-title {
   font-weight: 500;
-  color: #666;
+  color: #6b7280;
 }
 
 .minimize-btn {
@@ -226,17 +226,17 @@ const handleClickMinimized = () => {
   background: none;
   cursor: pointer;
   padding: 4px;
-  color: #999;
+  color: #787f84;
 }
 
 .minimize-btn:hover {
-  color: #1890ff;
+  color: #3bb36b;
 }
 
 .timer-display {
   font-size: 32px;
   font-weight: bold;
-  color: #1890ff;
+  color: #3bb36b;
   text-align: center;
   font-family: monospace;
   margin-bottom: 8px;
@@ -244,14 +244,14 @@ const handleClickMinimized = () => {
 
 .progress-bar {
   height: 4px;
-  background: #f0f0f0;
+  background: #e8f0ea;
   border-radius: 2px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: #1890ff;
+  background: #3bb36b;
   transition: width 1s linear;
 }
 
@@ -264,7 +264,7 @@ const handleClickMinimized = () => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  background: #1890ff;
+  background: #3bb36b;
   color: white;
 }
 

@@ -13,8 +13,13 @@
       <div class="chat-window" ref="chatWindowRef">
         <div v-for="(msg, index) in messages" :key="index" class="message-item" :class="msg.role">
           <div class="avatar">
-            <a-avatar v-if="msg.role === 'assistant'" style="background-color: #faad14">R</a-avatar>
-            <a-avatar v-else style="background-color: #1890ff">U</a-avatar>
+            <a-avatar v-if="msg.role === 'assistant'" style="background-color: #faad14">
+              <img :src="assistantAvatarSrc" alt="智能体生成助手" />
+            </a-avatar>
+            <a-avatar v-else style="background-color: #3bb36b">
+              <img v-if="userAvatarSrc" :src="userAvatarSrc" :alt="authStore.user?.username || '用户'" />
+              <template v-else>{{ getAvatarInitial(authStore.user?.username, 'U') }}</template>
+            </a-avatar>
           </div>
           <div class="content-wrapper">
             <!-- User Message -->
@@ -103,7 +108,9 @@
         
         <div v-if="loading && (!messages[messages.length-1]?.items || messages[messages.length-1]?.items?.length === 0)" class="message-item assistant">
           <div class="avatar">
-            <a-avatar style="background-color: #faad14">R</a-avatar>
+            <a-avatar style="background-color: #faad14">
+              <img :src="assistantAvatarSrc" alt="智能体生成助手" />
+            </a-avatar>
           </div>
           <div class="content-wrapper">
             <div class="bubble loading">
@@ -137,7 +144,9 @@ import { ref, nextTick, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { usePersonaStore } from '@/stores/persona'
+import { useAuthStore } from '@/stores/auth'
 import { SendOutlined } from '@ant-design/icons-vue'
+import { generatePersonaAvatar, getAvatarInitial, resolveBuiltInUserAvatarSrc } from '@/utils/avatar'
 
 interface MessageItem {
   type: 'text' | 'thought' | 'search' | 'persona' | 'error' | 'status'
@@ -173,11 +182,14 @@ const emit = defineEmits(['update:open'])
 
 const router = useRouter()
 const personaStore = usePersonaStore()
+const authStore = useAuthStore()
 const input = ref('')
 const chatWindowRef = ref<HTMLElement | null>(null)
 const messages = ref<ChatMessage[]>([])
 const loading = ref(false)
 const totalToGenerate = ref(1)
+const assistantAvatarSrc = generatePersonaAvatar('智造助手', 'agent-builder', 'real-god')
+const userAvatarSrc = computed(() => resolveBuiltInUserAvatarSrc(authStore.user))
 
 const visible = computed({
   get: () => props.open,
@@ -414,6 +426,12 @@ watch(visible, (newVal) => {
   align-self: flex-start;
 }
 
+.avatar :deep(.ant-avatar img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .content-wrapper {
   display: flex;
   flex-direction: column;
@@ -439,7 +457,7 @@ watch(visible, (newVal) => {
 }
 
 .user-bubble {
-  background: #1890ff;
+  background: #3bb36b;
   color: #fff;
   border-radius: 12px 12px 0 12px;
   box-shadow: 0 2px 6px rgba(24, 144, 255, 0.2);
@@ -484,7 +502,7 @@ watch(visible, (newVal) => {
 
 .query {
   font-weight: 500;
-  color: #1890ff;
+  color: #3bb36b;
 }
 
 .search-result {
@@ -579,7 +597,7 @@ watch(visible, (newVal) => {
 }
 
 .custom-textarea:hover, .custom-textarea:focus {
-  border-color: #1890ff;
+  border-color: #3bb36b;
   box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
 }
 
@@ -592,5 +610,3 @@ watch(visible, (newVal) => {
   gap: 6px;
 }
 </style>
-
-

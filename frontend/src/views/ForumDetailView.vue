@@ -210,7 +210,7 @@ const showSystemLogModal = () => {
 }
 
 const goBack = () => {
-    router.push('/forums')
+    router.push('/dashboard')
 }
 
 onMounted(async () => {
@@ -234,7 +234,7 @@ onMounted(async () => {
     // 2. Validate forum existence
     if (!forumStore.currentForum) {
          message.error('论坛不存在或加载失败')
-         router.push('/forums')
+         router.push('/dashboard')
          return
     }
     
@@ -269,12 +269,12 @@ const handleDelete = async () => {
     try {
         await forumStore.deleteForum(forumId)
         message.success('论坛已删除')
-        router.push('/forums')
+        router.push('/dashboard')
     } catch (e: any) {
         // If 404, it's already deleted
         if (e.response && e.response.status === 404) {
              message.success('论坛已删除')
-             router.push('/forums')
+             router.push('/dashboard')
         } else {
              message.error('删除失败')
         }
@@ -326,7 +326,7 @@ const handleStop = async () => {
   height: 60px;
   flex-shrink: 0; /* Prevent shrinking */
   padding: 0 24px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #e8f0ea;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -344,13 +344,13 @@ const handleStop = async () => {
 .forum-topic {
   font-size: 16px;
   font-weight: 500;
-  color: #262626;
+  color: #1a1d1e;
 }
 
 .chat-input-area {
   padding: 12px 24px;
   background: #fff;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid #e8f0ea;
   flex-shrink: 0;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.02);
 }

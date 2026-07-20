@@ -1,85 +1,101 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
-from fastapi.responses import StreamingResponse
-from typing import List, Optional, Any
-from pydantic import BaseModel
+from __future__ import annotations
+
 import json
 import logging
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
-from utils import get_chat_completion, LLMServiceError
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+
 from app.api.deps import get_current_user
+from app.crud import (
+    clear_chat_history,
+    create_artifact,
+    create_task_run,
+    get_chat_history,
+    get_task_run,
+    save_chat_attachments,
+    save_chat_message,
+    update_task_run,
+)
 from app.db.session import get_db
-from app.schemas import MessageResponse
-from app.crud import create_message, get_forum_messages, save_chat_message, get_chat_history, clear_chat_history
+from app.schemas import ArtifactCreate, ArtifactResponse, AttachmentResponse, TaskRunCreate, TaskRunUpdate
 from app.agent.agent import ParticipantAgent
 from app.agent.memory import SharedMemory
+from app.services.skill_runtime import (
+    build_llm_messages,
+    infer_skill_route,
+    render_csv_artifact,
+    render_png_artifact,
+    render_text_artifact,
+)
+from utils import LLMServiceError, get_chat_completion
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
+class ChatAttachmentInput(BaseModel):
+    id: Optional[int] = None
+    file_name: str
+    mime_type: Optional[str] = None
+    kind: Optional[str] = None
+    storage_url: Optional[str] = None
+    preview_url: Optional[str] = None
+    size: Optional[int] = None
+    meta: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentChatRequest(BaseModel):
     agent_name: str
-    persona_json: dict
-    context_messages: List[dict]
-    theme: str = "AI对未来的影响"
+    persona_json: Dict[str, Any]
+    context_messages: List[Dict[str, Any]] = Field(default_factory=list)
+    attachments: List[ChatAttachmentInput] = Field(default_factory=list)
+    theme: str = "自由对话"
+    skill_hints: List[str] = Field(default_factory=list)
 
 
 class AgentChatResponse(BaseModel):
     content: str
     thought: Optional[dict] = None
+    artifacts: List[ArtifactResponse] = Field(default_factory=list)
+    route: Optional[Dict[str, Any]] = None
+
+
+class ChatMessageCreate(BaseModel):
+    persona_id: int
+    role: str
+    content: str
+    message_type: str = "text"
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    attachment_ids: List[int] = Field(default_factory=list)
 
 
 def _latest_user_message(context_messages: List[dict]) -> str:
-    for msg in reversed(context_messages):
-        speaker = str(msg.get("speaker") or msg.get("role") or "").strip()
-        if speaker in {"用户", "user"}:
+    for msg in reversed(context_messages or []):
+        speaker = str(msg.get("speaker") or msg.get("role") or "").strip().lower()
+        if speaker in {"user", "用户", "鐢ㄦ埛"}:
             content = str(msg.get("content", "")).strip()
             if content:
                 return content
     return ""
 
 
-def _stream_fallback_message(request: Any, reason: str | None = None, error_kind: str | None = None) -> str:
-    latest_user = _latest_user_message(getattr(request, "context_messages", []) or [])
-    question_hint = f"你刚才的问题是：{latest_user}" if latest_user else "我暂时没有拿到完整的问题内容"
-
-    if error_kind == "auth":
-        advice = "请检查后端 API_KEY / BASE_URL 配置，确认密钥有效且拥有对应模型权限后再试。"
-    elif error_kind == "permission":
-        advice = "请检查当前账号是否具备该模型的调用权限后再试。"
-    elif error_kind == "not_found":
-        advice = "请检查模型名称和 BASE_URL 是否正确后再试。"
-    elif error_kind == "rate_limit":
-        advice = "请求过于频繁，请稍后再试。"
-    elif error_kind == "timeout":
-        advice = "请求超时，请稍后重试，或检查网络与上游服务状态。"
-    elif error_kind == "network":
-        advice = "无法连接上游服务，请检查网络与 BASE_URL 是否可达。"
-    elif error_kind == "empty_stream":
-        advice = "上游模型虽然连接成功，但没有返回可用内容，请稍后重试。"
-    else:
-        advice = "请稍后再试。"
-
-    if reason:
-        return f"抱歉，时空之门当前无法调用大模型服务，原因是：{reason}。{question_hint}。{advice}"
-
-    return f"抱歉，时空之门当前无法调用大模型服务。{question_hint}。{advice}"
-
-
 def _chunk_content(chunk: Any, use_vision: bool = False) -> str:
     if chunk is None:
         return ""
 
-    if use_vision:
-        if isinstance(chunk, dict):
-            choices = chunk.get("choices") or []
-            if not choices:
-                return ""
-            delta = choices[0].get("delta") or {}
-            return str(delta.get("content") or "")
-        return ""
+    if use_vision and isinstance(chunk, dict):
+        choices = chunk.get("choices") or []
+        if not choices:
+            return ""
+        delta = choices[0].get("delta") or {}
+        return str(delta.get("content") or "")
 
     choices = getattr(chunk, "choices", None)
     if not choices:
@@ -92,18 +108,8 @@ def _chunk_content(chunk: Any, use_vision: bool = False) -> str:
         return ""
 
 
-def _coerce_text_content(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value.strip()
-    if isinstance(value, (int, float, bool)):
-        return str(value)
-    return ""
-
-
 def _absolute_image_url(url: str, base_url: str = "") -> str:
-    clean_url = _coerce_text_content(url)
+    clean_url = str(url or "").strip()
     if not clean_url:
         return ""
     if clean_url.startswith(("http://", "https://")):
@@ -113,225 +119,300 @@ def _absolute_image_url(url: str, base_url: str = "") -> str:
     return clean_url
 
 
-def _normalize_message_content(content: Any, role: str, base_url: str = "") -> tuple[Any, bool]:
-    if isinstance(content, list):
-        normalized_parts = []
-        for part in content:
-            if not isinstance(part, dict):
-                continue
-            part_type = str(part.get("type") or "").strip()
-            if part_type == "text":
-                text = _coerce_text_content(part.get("text"))
-                if text:
-                    normalized_parts.append({"type": "text", "text": text})
-            elif part_type == "image_url":
-                image_url = part.get("image_url")
-                if isinstance(image_url, dict):
-                    url = _absolute_image_url(image_url.get("url"), base_url)
-                    if url:
-                        normalized_parts.append({"type": "image_url", "image_url": {"url": url}})
-        if normalized_parts:
-            return normalized_parts, True
-        return "", False
-
-    text = _coerce_text_content(content)
-    if not text:
-        return "", False
-
-    has_image = "![image]" in text or "<img src=" in text
-    if has_image and role == "user":
-        content_parts = []
-        import re
-
-        img_pattern = r"!\[image\]\((.*?)\)|<img[^>]+src=[\"'](.*?)[\"']"
-        matches = list(re.finditer(img_pattern, text))
-
-        last_idx = 0
-        for match in matches:
-            if match.start() > last_idx:
-                text_part = text[last_idx:match.start()].strip()
-                if text_part:
-                    content_parts.append({"type": "text", "text": text_part})
-
-            img_url = match.group(1) or match.group(2)
-            img_url = _absolute_image_url(img_url, base_url)
-            if img_url:
-                content_parts.append({"type": "image_url", "image_url": {"url": img_url}})
-            last_idx = match.end()
-
-        if last_idx < len(text):
-            text_part = text[last_idx:].strip()
-            if text_part:
-                content_parts.append({"type": "text", "text": text_part})
-
-        if content_parts:
-            return content_parts, True
-
-    return text, False
+def _build_context_messages_with_attachments(
+    persona: Dict[str, Any],
+    context_messages: List[dict],
+    attachments: List[dict],
+    base_url: str = "",
+) -> tuple[list[dict], bool, dict[str, Any]]:
+    messages, use_vision, route = build_llm_messages(persona, context_messages, attachments, base_url=base_url)
+    return messages, use_vision, route
 
 
-def _build_llm_messages(persona: dict, context_messages: List[dict], base_url: str = "") -> tuple[List[dict], bool]:
-    system_prompt = _coerce_text_content(persona.get("system_prompt")) or "你是一个专业的智能助手。"
-    messages = [{"role": "system", "content": system_prompt}]
-    use_vision = False
+def _artifact_from_text(
+    db,
+    owner_id: int,
+    persona_id: Optional[int],
+    task_run_id: Optional[int],
+    artifact_type: str,
+    title: str,
+    text: str,
+) -> ArtifactResponse:
+    artifact_type = (artifact_type or "docx").lower()
+    if artifact_type in {"csv", "sheet"}:
+        file_name, mime_type, storage_url = render_csv_artifact([{"content": text}], title=title)
+    elif artifact_type in {"png", "image"}:
+        file_name, mime_type, storage_url = render_png_artifact(text, title=title)
+    else:
+        file_name, mime_type, storage_url = render_text_artifact(text, title=title)
 
-    for msg in context_messages:
-        speaker = str(msg.get("speaker") or msg.get("role") or "").strip()
-        role = "user" if speaker in {"用户", "user"} else "assistant"
-        content = _coerce_text_content(msg.get("content", ""))
-        if not content:
-            continue
-        normalized_content, contains_image = _normalize_message_content(content, role, base_url)
+    artifact = create_artifact(
+        db,
+        ArtifactCreate(
+            owner_id=owner_id,
+            persona_id=persona_id,
+            task_run_id=task_run_id,
+            artifact_type=artifact_type,
+            file_name=file_name,
+            mime_type=mime_type,
+            storage_url=storage_url,
+            preview_url=storage_url,
+            version=1,
+            status="ready",
+            meta={"title": title},
+        ),
+    )
+    return ArtifactResponse.model_validate(artifact)
 
-        if normalized_content == "":
-            continue
 
-        if contains_image:
-            use_vision = True
-
-        messages.append({"role": role, "content": normalized_content})
-
-    return messages, use_vision
+def _owner_id_from_request(persona_json: Dict[str, Any]) -> int:
+    try:
+        return int(persona_json.get("owner_id") or 1)
+    except Exception:
+        return 1
 
 
-def _build_shared_memory_context(context_messages: List[dict], n_participants: int = 3) -> str:
-    memory = SharedMemory(n_participants=n_participants)
+def _maybe_create_artifact(
+    db,
+    request: AgentChatRequest,
+    route: dict[str, Any],
+    content: str,
+    task_run_id: Optional[int] = None,
+) -> list[ArtifactResponse]:
+    if not route.get("should_generate_artifact"):
+        return []
 
-    for msg in context_messages:
-        speaker = str(msg.get("speaker") or msg.get("role") or "").strip() or "Unknown"
-        role = "user" if speaker in {"用户", "user"} else "assistant"
-        normalized_content, _ = _normalize_message_content(msg.get("content", ""), role)
+    owner_id = _owner_id_from_request(request.persona_json)
+    persona_id = request.persona_json.get("id")
+    artifact_type = route.get("artifact_type") or "docx"
+    artifact = _artifact_from_text(
+        db=db,
+        owner_id=owner_id,
+        persona_id=persona_id,
+        task_run_id=task_run_id,
+        artifact_type=artifact_type,
+        title=request.agent_name or "artifact",
+        text=content,
+    )
+    return [artifact]
 
-        if isinstance(normalized_content, list):
-            text_parts = []
-            for part in normalized_content:
-                if not isinstance(part, dict):
-                    continue
-                if part.get("type") == "text":
-                    text = _coerce_text_content(part.get("text"))
-                    if text:
-                        text_parts.append(text)
-            content_text = "\n".join(text_parts).strip()
-        else:
-            content_text = _coerce_text_content(normalized_content)
 
-        if content_text:
-            memory.add_message(speaker, content_text)
-
-    return memory.get_context_str()
+def _stream_event(payload: dict[str, Any]) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def _message_timestamp_ms(value: Any) -> int:
-    if value is None:
-        return int(__import__("time").time() * 1000)
-
     if isinstance(value, (int, float)):
-        return int(value if value > 10_000_000_000 else value * 1000)
-
-    timestamp = getattr(value, "timestamp", None)
-    if callable(timestamp):
+        return int(value)
+    if isinstance(value, datetime):
+        return int(value.timestamp() * 1000)
+    if isinstance(value, str):
         try:
-            return int(timestamp() * 1000)
+            return int(float(value))
         except Exception:
-            pass
+            try:
+                return int(datetime.fromisoformat(value).timestamp() * 1000)
+            except Exception:
+                return int(datetime.now().timestamp() * 1000)
+    return int(datetime.now().timestamp() * 1000)
 
-    try:
-        return int(float(value))
-    except Exception:
-        return int(__import__("time").time() * 1000)
+
+def _json_value(value: Any, fallback: Any = None) -> Any:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return fallback if fallback is not None else value
+    return value if value is not None else fallback
+
+
+def _task_run_update(
+    status: str,
+    progress: int,
+    output_payload: Optional[dict[str, Any]] = None,
+    error_message: Optional[str] = None,
+) -> TaskRunUpdate:
+    return TaskRunUpdate(
+        status=status,
+        progress=progress,
+        output_payload=output_payload,
+        error_message=error_message,
+    )
 
 
 @router.post("/chat", response_model=AgentChatResponse)
-async def chat_with_agent(request: AgentChatRequest):
-    """
-    Directly invoke an agent to think and speak based on provided context.
-    """
+async def chat_with_agent(request: AgentChatRequest, db=Depends(get_db)):
     try:
-        agent = ParticipantAgent(
-            name=request.agent_name,
-            persona=request.persona_json,
-            n_participants=3,
-            theme=request.theme,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to initialize agent: {str(e)}")
-
-    context_str = _build_shared_memory_context(request.context_messages, n_participants=3)
-    thought = agent.think(context_str)
-
-    if not thought:
-        raise HTTPException(status_code=500, detail="Agent failed to think")
-
-    if thought.get("action") == "listen":
-        return AgentChatResponse(
-            content=_stream_fallback_message(request, "模型判断当前更适合倾听，未生成发言内容", error_kind="empty_stream"),
-            thought=thought,
+        messages, use_vision, route = _build_context_messages_with_attachments(
+            request.persona_json,
+            request.context_messages,
+            [att.model_dump() for att in request.attachments],
+            base_url="",
         )
 
-    response_stream = agent.speak(thought, context_str)
-    full_content = ""
-    if response_stream:
-        for chunk in response_stream:
-            full_content += _chunk_content(chunk)
+        if len(messages) <= 1:
+            return AgentChatResponse(
+                content="抱歉，我暂时没有收到有效输入。",
+                route=route,
+            )
 
-    if not full_content.strip():
-        full_content = _stream_fallback_message(request, "模型没有返回可解析的回答", error_kind="empty_stream")
+        try:
+            response = get_chat_completion(messages, stream=False, use_vision=use_vision, raise_error=True)
+            content = ""
+            if response and getattr(response, "choices", None):
+                content = response.choices[0].message.content or ""
+        except LLMServiceError as exc:
+            return AgentChatResponse(content=exc.message, thought=None, route=route)
 
-    return AgentChatResponse(content=full_content, thought=thought)
+        if not content.strip():
+            content = "抱歉，我暂时无法生成内容。"
+
+        task_run = None
+        if route.get("should_generate_artifact"):
+            task_run = create_task_run(
+                db,
+                TaskRunCreate(
+                    owner_id=_owner_id_from_request(request.persona_json),
+                    persona_id=request.persona_json.get("id"),
+                    skill_key=route.get("skill_key"),
+                    session_id=None,
+                    status="done",
+                    progress=100,
+                    input_payload={"theme": request.theme},
+                    output_payload={"preview": content[:200]},
+                ),
+            )
+
+        artifacts = _maybe_create_artifact(db, request, route, content, task_run_id=getattr(task_run, "id", None))
+
+        return AgentChatResponse(content=content, route=route, artifacts=artifacts)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Agent failed: {exc}")
 
 
 @router.post("/chat/stream")
-async def chat_with_agent_stream(request: AgentChatRequest, http_request: Request):
-    """
-    Streaming chat endpoint for time gate conversations.
-    """
-    messages, use_vision = _build_llm_messages(request.persona_json, request.context_messages, str(http_request.base_url))
+async def chat_with_agent_stream(request: AgentChatRequest, http_request: Request, db=Depends(get_db)):
+    try:
+        messages, use_vision, route = _build_context_messages_with_attachments(
+            request.persona_json,
+            request.context_messages,
+            [att.model_dump() for att in request.attachments],
+            base_url=str(http_request.base_url),
+        )
 
-    if len(messages) <= 1:
-        async def empty_stream():
-            yield f"data: {json.dumps({'content': _stream_fallback_message(request, '缺少有效的用户消息', error_kind='empty_stream')}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
-
-        return StreamingResponse(empty_stream(), media_type="text/event-stream")
-
-    async def generate():
-        try:
-            stream = get_chat_completion(messages, stream=True, use_vision=use_vision, raise_error=True)
-            if not stream:
-                yield f"data: {json.dumps({'content': _stream_fallback_message(request, '上游模型未返回有效流', error_kind='empty_stream')}, ensure_ascii=False)}\n\n"
+        if len(messages) <= 1:
+            async def empty_stream():
+                yield _stream_event({"content": "抱歉，我暂时没有收到有效输入。"})
                 yield "data: [DONE]\n\n"
-                return
 
-            emitted_any = False
-            for chunk in stream:
-                content = _chunk_content(chunk, use_vision=use_vision)
-                if content:
-                    emitted_any = True
-                    yield f"data: {json.dumps({'content': content}, ensure_ascii=False)}\n\n"
+            return StreamingResponse(empty_stream(), media_type="text/event-stream")
 
-            if not emitted_any:
-                yield f"data: {json.dumps({'content': _stream_fallback_message(request, '上游模型返回了空内容', error_kind='empty_stream')}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
-        except LLMServiceError as e:
-            logger.error(f"Stream LLM error ({e.kind}): {e.details or e.message}")
-            yield f"data: {json.dumps({'content': _stream_fallback_message(request, e.message, error_kind=e.kind)}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
-        except Exception as e:
-            logger.error(f"Stream error: {e}")
-            yield f"data: {json.dumps({'content': _stream_fallback_message(request, str(e), error_kind='unknown')}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
+        owner_id = _owner_id_from_request(request.persona_json)
+        task_run = None
+        if route.get("should_generate_artifact"):
+            task_run = create_task_run(
+                db,
+                TaskRunCreate(
+                    owner_id=owner_id,
+                    persona_id=request.persona_json.get("id"),
+                    skill_key=route.get("skill_key"),
+                    session_id=None,
+                    status="running",
+                    progress=5,
+                    input_payload={"theme": request.theme},
+                    output_payload={},
+                ),
+            )
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+        async def generate():
+            full_content = ""
+            artifact_payload: list[ArtifactResponse] = []
+            try:
+                stream = get_chat_completion(messages, stream=True, use_vision=use_vision, raise_error=True)
+                if not stream:
+                    yield _stream_event({"content": "抱歉，我暂时无法调用模型服务。"})
+                    yield "data: [DONE]\n\n"
+                    return
+
+                emitted_any = False
+                for chunk in stream:
+                    content = _chunk_content(chunk, use_vision=use_vision)
+                    if content:
+                        emitted_any = True
+                        full_content += content
+                        yield _stream_event({"content": content})
+
+                if not emitted_any:
+                    full_content = "抱歉，我暂时无法调用模型服务。"
+                    yield _stream_event({"content": full_content})
+
+                if route.get("should_generate_artifact"):
+                    artifact_payload = _maybe_create_artifact(
+                        db,
+                        request,
+                        route,
+                        full_content,
+                        task_run_id=getattr(task_run, "id", None),
+                    )
+                    if task_run:
+                        update_task_run(
+                            db,
+                            task_run.id,
+                            _task_run_update(
+                                status="done",
+                                progress=100,
+                                output_payload={"artifact_ids": [a.id for a in artifact_payload]},
+                            ),
+                        )
+                    for artifact in artifact_payload:
+                        yield _stream_event({"type": "artifact", "artifact": artifact.model_dump(mode="json")})
+                yield "data: [DONE]\n\n"
+            except LLMServiceError as e:
+                if task_run:
+                    update_task_run(
+                        db,
+                        task_run.id,
+                        _task_run_update(status="failed", progress=100, error_message=e.message),
+                    )
+                yield _stream_event({"error": e.message, "kind": e.kind})
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                if task_run:
+                    update_task_run(
+                        db,
+                        task_run.id,
+                        _task_run_update(status="failed", progress=100, error_message=str(e)),
+                    )
+                yield _stream_event({"error": str(e)})
+                yield "data: [DONE]\n\n"
+
+        return StreamingResponse(generate(), media_type="text/event-stream")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Stream failed: {exc}")
 
 
 @router.get("/chat/history/{persona_id}")
 async def get_user_chat_history(persona_id: int, db=Depends(get_db), current_user=Depends(get_current_user)):
-    """Get chat history for a specific persona."""
     history = get_chat_history(db, current_user.id, persona_id)
     return [
         {
             "role": msg.role,
             "content": msg.content,
+            "message_type": getattr(msg, "message_type", "text"),
+            "metadata": _json_value(getattr(msg, "metadata", {}), {}),
+            "attachments": [
+                {
+                    "id": att.id,
+                    "file_name": att.file_name,
+                    "mime_type": att.mime_type,
+                    "kind": att.kind,
+                    "storage_url": att.storage_url,
+                    "preview_url": att.preview_url,
+                    "size": att.size,
+                    "meta": _json_value(getattr(att, "meta", {}), {}),
+                }
+                for att in (getattr(msg, "attachments", []) or [])
+            ],
             "timestamp": _message_timestamp_ms(getattr(msg, "created_at", None)),
         }
         for msg in history
@@ -340,15 +421,8 @@ async def get_user_chat_history(persona_id: int, db=Depends(get_db), current_use
 
 @router.delete("/chat/history/{persona_id}")
 async def clear_user_chat_history(persona_id: int, db=Depends(get_db), current_user=Depends(get_current_user)):
-    """Clear chat history for a specific persona."""
     success = clear_chat_history(db, current_user.id, persona_id)
     return {"success": success}
-
-
-class ChatMessageCreate(BaseModel):
-    persona_id: int
-    role: str
-    content: str
 
 
 @router.post("/chat/message")
@@ -357,12 +431,15 @@ async def save_chat_message_endpoint(
     db=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Persist a chat message."""
     msg = save_chat_message(
         db,
         user_id=current_user.id,
         persona_id=request.persona_id,
         role=request.role,
         content=request.content,
+        message_type=request.message_type,
+        metadata=request.metadata,
     )
+    if request.attachment_ids:
+        save_chat_attachments(db, msg.id, request.attachment_ids)
     return {"success": msg is not None, "id": msg.id if msg else None}

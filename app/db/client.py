@@ -12,6 +12,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 from app.core.config import settings
+from app.db.migrations import ensure_multimodal_schema, seed_default_skills
 
 logger = logging.getLogger(__name__)
 
@@ -262,8 +263,10 @@ class Database:
             with open(schema_path, "r", encoding="utf-8") as handle:
                 script = handle.read()
                 statements = [stmt.strip() for stmt in script.split(";") if stmt.strip()]
-                for stmt in statements:
-                    conn.execute(stmt)
+            for stmt in statements:
+                conn.execute(stmt)
+            ensure_multimodal_schema(conn, self.is_postgres)
+            seed_default_skills(conn)
             logger.info("Database initialized successfully.")
         except Exception as exc:
             logger.error("Failed to initialize database: %s", exc)

@@ -4,6 +4,8 @@ import time
 import re
 import base64
 import requests
+from pathlib import Path
+from urllib.parse import urlparse
 from zhipuai import ZhipuAI, APIRequestFailedError, APITimeoutError
 try:
     from zhipuai import APIError
@@ -138,6 +140,107 @@ class LLMServiceError(RuntimeError):
         return cls(kind="upstream_error", message=f"上游模型调用失败：{raw}", details=raw)
 
 
+_VISION_FAILURE_COOLDOWN_SECONDS = 300
+_vision_disabled_until = 0.0
+
+
+def _vision_temporarily_disabled() -> bool:
+    return time.time() < _vision_disabled_until
+
+
+def _mark_vision_temporarily_disabled(cooldown_seconds: int = _VISION_FAILURE_COOLDOWN_SECONDS) -> None:
+    global _vision_disabled_until
+    _vision_disabled_until = max(_vision_disabled_until, time.time() + cooldown_seconds)
+
+
+def _is_unrecoverable_vision_error(exc: Exception) -> bool:
+    raw = str(exc).lower()
+    return any(
+        token in raw
+        for token in (
+            "nameresolutionerror",
+            "failed to resolve",
+            "getaddrinfo failed",
+            "name or service not known",
+            "temporary failure in name resolution",
+            "connection refused",
+            "dns",
+        )
+    )
+
+
+def _attachment_label_from_url(url: str) -> str:
+    if not url:
+        return "image"
+    parsed = urlparse(url)
+    label = Path(parsed.path).name.strip()
+    return label or "image"
+
+
+def _message_content_to_text(content):
+    if isinstance(content, str):
+        return content.strip()
+
+    if isinstance(content, dict):
+        content = [content]
+
+    if not isinstance(content, list):
+        return str(content).strip()
+
+    parts: list[str] = []
+    for part in content:
+        if not isinstance(part, dict):
+            text = str(part).strip()
+            if text:
+                parts.append(text)
+            continue
+
+        part_type = str(part.get("type") or "").strip().lower()
+        if part_type == "text":
+            text = str(part.get("text") or "").strip()
+            if text:
+                parts.append(text)
+            continue
+
+        if part_type in {"image", "image_url"}:
+            url = str(part.get("url") or part.get("image_url", {}).get("url") or "").strip()
+            parts.append(f"[image: {_attachment_label_from_url(url)}]")
+            continue
+
+        if part_type == "file":
+            file_name = str(part.get("file_name") or part.get("name") or "file").strip() or "file"
+            parts.append(f"[file: {file_name}]")
+            continue
+
+        if part_type == "video":
+            file_name = str(part.get("file_name") or part.get("name") or "video").strip() or "video"
+            parts.append(f"[video: {file_name}]")
+            continue
+
+        if part_type == "audio":
+            file_name = str(part.get("file_name") or part.get("name") or "audio").strip() or "audio"
+            parts.append(f"[audio: {file_name}]")
+            continue
+
+    return "\n".join(part for part in parts if part).strip()
+
+
+def _sanitize_messages_for_text_model(messages):
+    sanitized = []
+    for message in messages or []:
+        if not isinstance(message, dict):
+            continue
+
+        content = message.get("content")
+        if isinstance(content, (list, dict)):
+            content = _message_content_to_text(content)
+        elif content is None:
+            content = ""
+
+        sanitized.append({**message, "content": content})
+    return sanitized
+
+
 def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, timeout=30, callback=None, raise_error=False, use_vision=False):
     """
     Wrapper for ZhipuAI chat completion with retry logic and timeout.
@@ -147,12 +250,12 @@ def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, 
         raise_error: If True, raise the last exception instead of returning None when all retries fail.
         use_vision: If True, use volcanic engine visual model for multimodal input
     """
-    attempt = 0
     last_error = None
     
     # 如果是多模态请求且配置了火山引擎API，使用火山引擎视觉模型
-    if use_vision and settings.VOLC_API_KEY:
-        while attempt < max_retries:
+    if use_vision and settings.VOLC_API_KEY and not _vision_temporarily_disabled():
+        vision_attempt = 0
+        while vision_attempt < max_retries:
             try:
                 headers = {
                     "Authorization": f"Bearer {settings.VOLC_API_KEY}",
@@ -196,13 +299,20 @@ def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, 
                     return response.json()
                     
             except requests.exceptions.RequestException as e:
-                error_msg = f"Volc API Request Failed (Attempt {attempt+1}/{max_retries}): {e}"
+                error_msg = f"Volc API Request Failed (Attempt {vision_attempt+1}/{max_retries}): {e}"
                 logger.warning(error_msg)
                 last_error = e
+                if _is_unrecoverable_vision_error(e):
+                    logger.warning(
+                        "Vision API appears unreachable; short-circuiting retries and cooling down for %ss",
+                        _VISION_FAILURE_COOLDOWN_SECONDS,
+                    )
+                    _mark_vision_temporarily_disabled()
+                    break
                 
-            attempt += 1
-            if attempt < max_retries:
-                time.sleep(1 + attempt)
+            vision_attempt += 1
+            if vision_attempt < max_retries:
+                time.sleep(1 + vision_attempt)
 
         if last_error:
             logger.warning(
@@ -213,12 +323,14 @@ def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, 
     
     # 普通文本请求或火山引擎不可用，使用智谱AI
     client = _build_llm_client()
+    text_messages = _sanitize_messages_for_text_model(messages)
+    attempt = 0
     while attempt < max_retries:
         try:
             if stream:
                 return client.chat.completions.create(
                     model=settings.MODEL_NAME,
-                    messages=messages,
+                    messages=text_messages,
                     stream=True,
                     temperature=0.8,
                     max_tokens=4096,
@@ -228,7 +340,7 @@ def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, 
             
             response = client.chat.completions.create(
                 model=settings.MODEL_NAME,
-                messages=messages,
+                messages=text_messages,
                 stream=False,
                 temperature=0.8,
                 max_tokens=4096,

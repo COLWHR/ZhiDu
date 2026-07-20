@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS personas (
     stance TEXT,
     system_prompt TEXT,
     is_public BOOLEAN DEFAULT FALSE,
+    avatar TEXT,
+    skills JSONB DEFAULT '[]'::jsonb,
+    skill_policy JSONB DEFAULT '{}'::jsonb,
+    modalities JSONB DEFAULT '["text"]'::jsonb,
+    capabilities_version INTEGER DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -108,6 +113,111 @@ CREATE TABLE IF NOT EXISTS system_logs (
     content TEXT NOT NULL,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (forum_id) REFERENCES forums(id) ON DELETE CASCADE
+);
+
+-- Chat Messages table
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    persona_id INTEGER NOT NULL,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant')),
+    message_type VARCHAR(50) DEFAULT 'text',
+    content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE
+);
+
+-- Skills catalog
+CREATE TABLE IF NOT EXISTS skills (
+    id SERIAL PRIMARY KEY,
+    skill_key VARCHAR(255) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    category VARCHAR(255) DEFAULT 'general',
+    description TEXT,
+    input_modalities JSONB DEFAULT '[]'::jsonb,
+    output_types JSONB DEFAULT '[]'::jsonb,
+    required_models JSONB DEFAULT '[]'::jsonb,
+    required_tools JSONB DEFAULT '[]'::jsonb,
+    params_schema JSONB DEFAULT '{}'::jsonb,
+    permission_scope JSONB DEFAULT '[]'::jsonb,
+    cost_level VARCHAR(50) DEFAULT 'low',
+    status VARCHAR(50) DEFAULT 'active',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Persona to Skill bindings
+CREATE TABLE IF NOT EXISTS persona_skill_bindings (
+    id SERIAL PRIMARY KEY,
+    persona_id INTEGER NOT NULL,
+    skill_id INTEGER NOT NULL,
+    enabled BOOLEAN DEFAULT TRUE,
+    priority INTEGER DEFAULT 0,
+    policy JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE,
+    FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+    UNIQUE (persona_id, skill_id)
+);
+
+-- Upload attachments
+CREATE TABLE IF NOT EXISTS attachments (
+    id SERIAL PRIMARY KEY,
+    owner_id INTEGER NOT NULL,
+    persona_id INTEGER,
+    chat_message_id INTEGER,
+    session_id INTEGER,
+    file_name VARCHAR(255) NOT NULL,
+    mime_type TEXT,
+    size INTEGER,
+    kind VARCHAR(50),
+    storage_url TEXT NOT NULL,
+    preview_url TEXT,
+    sha256 VARCHAR(128),
+    meta JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE SET NULL,
+    FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
+);
+
+-- Generated artifacts
+CREATE TABLE IF NOT EXISTS artifacts (
+    id SERIAL PRIMARY KEY,
+    owner_id INTEGER NOT NULL,
+    persona_id INTEGER,
+    task_run_id INTEGER,
+    artifact_type VARCHAR(100) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    mime_type TEXT,
+    storage_url TEXT NOT NULL,
+    preview_url TEXT,
+    version INTEGER DEFAULT 1,
+    status VARCHAR(50) DEFAULT 'ready',
+    meta JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE SET NULL
+);
+
+-- Task runs for long skill execution
+CREATE TABLE IF NOT EXISTS task_runs (
+    id SERIAL PRIMARY KEY,
+    owner_id INTEGER NOT NULL,
+    persona_id INTEGER,
+    skill_key VARCHAR(255),
+    session_id INTEGER,
+    status VARCHAR(50) DEFAULT 'queued',
+    progress INTEGER DEFAULT 0,
+    input_payload JSONB DEFAULT '{}'::jsonb,
+    output_payload JSONB DEFAULT '{}'::jsonb,
+    error_message TEXT,
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP WITH TIME ZONE,
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE SET NULL
 );
 
 -- Duxin Sessions table

@@ -24,8 +24,7 @@
 .user-layout-container {
   width: 100%;
   min-height: 100vh;
-  background: #f0f2f5 url(https://gw.alipayobjects.com/zos/rmsportal/TVYTbAXWheQpRcWDaDMu.svg) no-repeat center 110px;
-  background-size: 100%;
+  background: #f2f7f3;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -74,18 +73,18 @@
 }
 
 .user-layout-footer .links a {
-  color: rgba(0, 0, 0, 0.45);
+  color: #787f84;
   transition: all 0.3s;
   text-decoration: none;
   margin: 0 12px;
 }
 
 .user-layout-footer .links a:hover {
-  color: rgba(0, 0, 0, 0.65);
+  color: #2d3236;
 }
 
 .user-layout-footer .copyright {
-  color: rgba(0, 0, 0, 0.45);
+  color: #787f84;
   font-size: 14px;
 }
 

@@ -115,6 +115,7 @@ venv.bak/
 node_modules/
 frontend/node_modules/
 frontend/coverage/
+frontend/cypress/screenshots/
 
 # Packaging artifacts
 deploy/miniprogram.zip
@@ -170,6 +171,11 @@ Thumbs.db
 # Databases
 *.db
 *.sqlite
+madf.db.backup-*
+
+# Runtime generated files
+uploads/
+skills/skillhub/
 
 # Docker volumes
 madf_data/

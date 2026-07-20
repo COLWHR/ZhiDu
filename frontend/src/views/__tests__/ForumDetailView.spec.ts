@@ -91,6 +91,6 @@ describe('ForumDetailView', () => {
     expect(rightButtons.length).toBe(4)
 
     await backButton.trigger('click')
-    expect(mockRouter.push).toHaveBeenCalledWith('/forums')
+    expect(mockRouter.push).toHaveBeenCalledWith('/dashboard')
   })
 })

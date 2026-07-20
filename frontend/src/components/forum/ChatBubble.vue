@@ -7,7 +7,8 @@
         </template>
       </a-avatar>
       <a-avatar v-else key="participant-avatar" :style="{ backgroundColor: avatarColor }" size="large">
-        {{ speakerInitial }}
+        <img v-if="avatarSrc" :src="avatarSrc" :alt="speakerName" />
+        <template v-else>{{ speakerInitial }}</template>
       </a-avatar>
     </div>
     
@@ -67,6 +68,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { LoadingOutlined, UserOutlined, BulbOutlined } from '@ant-design/icons-vue'
+import { getAvatarInitial, isImageAvatar } from '@/utils/avatar'
 
 const props = defineProps<{
   speakerName: string
@@ -76,6 +78,7 @@ const props = defineProps<{
   isSelf: boolean
   isStreaming?: boolean
   moderatorId?: number | null
+  avatar?: string
 }>()
 
 const isModerator = computed(() => {
@@ -87,7 +90,11 @@ const isStreaming = computed(() => {
 })
 
 const speakerInitial = computed(() => {
-    return props.speakerName ? props.speakerName[0] : '?'
+    return getAvatarInitial(props.speakerName, '?')
+})
+
+const avatarSrc = computed(() => {
+  return isImageAvatar(props.avatar) ? props.avatar : ''
 })
 
 const formatTime = (isoString: string) => {
@@ -98,7 +105,7 @@ const formatTime = (isoString: string) => {
 
 const avatarColor = computed(() => {
   if (isModerator.value) return '#e6c273' // Light gold for moderator
-  const colors = ['#f0a868', '#a395e6', '#ffd68a', '#86d3e0', '#94c5ff', '#a8d8b9', '#e6b8d6']
+  const colors = ['#f0a868', '#a395e6', '#ffd68a', '#86d3e0', '#3bb36b', '#a8d8b9', '#e6b8d6']
   let hash = 0
   for (let i = 0; i < props.speakerName.length; i++) {
     hash = props.speakerName.charCodeAt(i) + ((hash << 5) - hash)
@@ -148,6 +155,13 @@ const isAudioContent = computed(() => {
   flex-direction: column;
 }
 
+.message-avatar :deep(.ant-avatar img),
+.message-avatar .avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .message-self .message-content-wrapper {
   align-items: flex-end;
 }
@@ -155,7 +169,7 @@ const isAudioContent = computed(() => {
 .message-info {
   margin-bottom: 4px;
   font-size: 12px;
-  color: #8c8c8c;
+  color: #6b7280;
   display: flex;
   align-items: center;
 }
@@ -187,7 +201,7 @@ const isAudioContent = computed(() => {
 }
 
 .message-self .message-bubble {
-  background: #e6f0ff;
+  background: #ebf7ee;
   color: #333;
   border-radius: 8px 0 8px 8px;
 }
@@ -212,7 +226,7 @@ const isAudioContent = computed(() => {
     padding: 8px;
     border-radius: 4px;
     margin-top: 4px;
-    color: #666;
+    color: #6b7280;
     font-style: italic;
     white-space: pre-wrap;
 }

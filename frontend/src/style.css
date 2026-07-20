@@ -1,13 +1,104 @@
+/* ============================================
+   ZhiDo 企业级设计 Token 系统
+   绿白黑企业级配色体系
+   ============================================ */
+
 :root {
+  /* ── 品牌主色 (来自小程序) ── */
+  --brand-primary: #3bb36b;
+  --brand-primary-dark: #2fa15c;
+  --brand-primary-light: #ebf7ee;
+  --brand-primary-bright: #24c65f;
+  --brand-primary-shadow: rgba(59, 179, 107, 0.26);
+
+  /* ── 品牌主色 ── */
+  --gradient-brand: #3bb36b;
+  --gradient-brand-soft: rgba(59, 179, 107, 0.1);
+  --gradient-brand-vivid: #2fa15c;
+  --gradient-brand-shadow: rgba(59, 179, 107, 0.3);
+
+  /* ── 辅助色 ── */
+  --gradient-accent: #2fa15c;
+  --gradient-mint: #2fa15c;
+  --gradient-warm: #f59e0b;
+  --gradient-sky: #3b82f6;
+
+  /* ── 深色基调 (来自小程序 #1e2124) ── */
+  --brand-dark: #1e2124;
+  --brand-dark-secondary: #2d3135;
+  --brand-dark-text: rgba(255, 255, 255, 0.88);
+
+  /* ── 黄绿强调 (来自小程序) ── */
+  --brand-lime: #bee83f;
+  --brand-lime-bright: #c7f35b;
+  --brand-lime-deep: #9fe42e;
+
+  /* ── 文字色层次 ── */
+  --text-heading: #1a1d1e;
+  --text-body: #2d3236;
+  --text-secondary: #6b7280;
+  --text-muted: #94a3b8;
+  --text-placeholder: #a8b1c1;
+  --text-link: #3bb36b;
+  --text-link-hover: #2fa15c;
+  --text-on-brand: #ffffff;
+
+  /* ── 背景色层次 ── */
+  --bg-page: #f2f7f3;
+  --bg-card: #ffffff;
+  --bg-subtle: #f8faf8;
+  --bg-hover: #eef5f0;
+  --bg-active: #e8f5eb;
+  --bg-input: #f8faf8;
+  --bg-mask: rgba(30, 33, 36, 0.52);
+
+  /* ── 边框色 ── */
+  --border-light: #e8f0ea;
+  --border-medium: #d4e0d8;
+  --border-focus: #3bb36b;
+
+  /* ── 功能色 ── */
+  --color-success: #15803d;
+  --color-success-bg: #ecfdf5;
+  --color-warning: #b45309;
+  --color-warning-bg: #fff7ed;
+  --color-error: #dc2626;
+  --color-error-bg: #fef2f2;
+  --color-info: #3bb36b;
+  --color-info-bg: #ebf7ee;
+
+  /* ── 圆角规范 ── */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 999px;
+
+  /* ── 阴影规范 ── */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.08);
+  --shadow-brand: 0 4px 15px rgba(59, 179, 107, 0.3);
+  --shadow-brand-lg: 0 10px 40px rgba(59, 179, 107, 0.3);
+  --shadow-elevated: 0 12px 40px rgba(0, 0, 0, 0.12);
+
+  /* ── 过渡 ── */
+  --transition-fast: all 0.18s ease;
+  --transition-base: all 0.3s ease;
+  --transition-slow: all 0.5s ease;
+
+  /* ── 字体 ── */
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-    'Noto Color Emoji';
+    'Noto Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   line-height: 1.6;
   font-weight: 400;
 
   color-scheme: light;
-  color: #213547;
-  background-color: #ffffff;
+  color: var(--text-body);
+  background-color: var(--bg-card);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -23,7 +114,7 @@ body {
   margin: 0;
   width: 100%;
   min-height: 100vh;
-  background: #f5f7fa;
+  background: var(--bg-page);
 }
 
 #app {
@@ -31,7 +122,7 @@ body {
   min-height: 100vh;
 }
 
-/* 动画效果 */
+/* ── 动画效果 ── */
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -45,4 +136,49 @@ body {
 
 .fade-in-up {
   animation: fadeInUp 0.6s ease-out forwards;
+}
+
+/* ── 通用品牌按钮样式 ── */
+.btn-brand {
+  background: var(--gradient-brand) !important;
+  border: none !important;
+  color: var(--text-on-brand) !important;
+  box-shadow: var(--shadow-brand);
+  transition: var(--transition-base);
+}
+
+.btn-brand:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(59, 179, 107, 0.4) !important;
+}
+
+/* ── 通用品牌链接样式 ── */
+a.brand-link {
+  color: var(--text-link);
+  text-decoration: none;
+  font-weight: 500;
+  transition: var(--transition-base);
+}
+
+a.brand-link:hover {
+  color: var(--text-link-hover);
+}
+
+/* ── 滚动条美化 ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }

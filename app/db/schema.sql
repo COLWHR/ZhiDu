@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS personas (
     stance TEXT,
     system_prompt TEXT,
     is_public BOOLEAN DEFAULT 0,
+    avatar TEXT,
+    skills TEXT DEFAULT '[]',
+    skill_policy TEXT DEFAULT '{}',
+    modalities TEXT DEFAULT '["text"]',
+    capabilities_version INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -116,10 +121,103 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     user_id INTEGER NOT NULL,
     persona_id INTEGER NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    message_type TEXT DEFAULT 'text',
     content TEXT NOT NULL,
+    metadata TEXT DEFAULT '{}',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE
+);
+
+-- Skills catalog
+CREATE TABLE IF NOT EXISTS skills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    skill_key TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    category TEXT DEFAULT 'general',
+    description TEXT,
+    input_modalities TEXT DEFAULT '[]',
+    output_types TEXT DEFAULT '[]',
+    required_models TEXT DEFAULT '[]',
+    required_tools TEXT DEFAULT '[]',
+    params_schema TEXT DEFAULT '{}',
+    permission_scope TEXT DEFAULT '[]',
+    cost_level TEXT DEFAULT 'low',
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Persona to Skill bindings
+CREATE TABLE IF NOT EXISTS persona_skill_bindings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    persona_id INTEGER NOT NULL,
+    skill_id INTEGER NOT NULL,
+    enabled BOOLEAN DEFAULT 1,
+    priority INTEGER DEFAULT 0,
+    policy TEXT DEFAULT '{}',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE,
+    FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+    UNIQUE (persona_id, skill_id)
+);
+
+-- Upload attachments
+CREATE TABLE IF NOT EXISTS attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL,
+    persona_id INTEGER,
+    chat_message_id INTEGER,
+    session_id INTEGER,
+    file_name TEXT NOT NULL,
+    mime_type TEXT,
+    size INTEGER,
+    kind TEXT,
+    storage_url TEXT NOT NULL,
+    preview_url TEXT,
+    sha256 TEXT,
+    meta TEXT DEFAULT '{}',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE SET NULL,
+    FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
+);
+
+-- Generated artifacts
+CREATE TABLE IF NOT EXISTS artifacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL,
+    persona_id INTEGER,
+    task_run_id INTEGER,
+    artifact_type TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    mime_type TEXT,
+    storage_url TEXT NOT NULL,
+    preview_url TEXT,
+    version INTEGER DEFAULT 1,
+    status TEXT DEFAULT 'ready',
+    meta TEXT DEFAULT '{}',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE SET NULL
+);
+
+-- Task runs for long skill execution
+CREATE TABLE IF NOT EXISTS task_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL,
+    persona_id INTEGER,
+    skill_key TEXT,
+    session_id INTEGER,
+    status TEXT DEFAULT 'queued',
+    progress INTEGER DEFAULT 0,
+    input_payload TEXT DEFAULT '{}',
+    output_payload TEXT DEFAULT '{}',
+    error_message TEXT,
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    finished_at DATETIME,
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE SET NULL
 );
 
 -- Duxin Sessions table

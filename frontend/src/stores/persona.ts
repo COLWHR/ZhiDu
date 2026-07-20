@@ -12,17 +12,25 @@ export interface Persona {
   system_prompt: string
   is_public: boolean
   avatar?: string
+  skills: string[]
+  skill_policy: Record<string, unknown>
+  modalities: string[]
+  capabilities_version: number
 }
 
 interface CreatePersonaData {
-    name: string;
-    title?: string;
-    bio?: string;
-    theories?: string[];
-    stance?: string;
-    system_prompt?: string;
-    is_public?: boolean;
-    avatar?: string;
+  name: string
+  title?: string
+  bio?: string
+  theories?: string[]
+  stance?: string
+  system_prompt?: string
+  is_public?: boolean
+  avatar?: string
+  skills?: string[]
+  skill_policy?: Record<string, unknown>
+  modalities?: string[]
+  capabilities_version?: number
 }
 
 export const usePersonaStore = defineStore('persona', {

@@ -6,7 +6,38 @@
           <h2 class="welcome-title">助手仓库</h2>
           <p class="welcome-subtitle">探索和管理您的智能助手</p>
         </div>
-        <div class="greeting-emoji">🎁</div>
+        <div class="welcome-panel">
+          <div class="insight-grid">
+            <button class="insight-tile" type="button" :class="{ active: currentCategory === '所有' && !searchQuery }" @click="resetFilters">
+              <span>全部助手</span>
+              <strong>{{ systemAgents.length }}</strong>
+            </button>
+            <button class="insight-tile" type="button" :class="{ active: currentCategory === topCategory?.name }" @click="selectCategory(topCategory?.name || '所有')">
+              <span>热门分类</span>
+              <strong>{{ topCategory?.name || '所有' }}</strong>
+            </button>
+            <button class="insight-tile" type="button" @click="focusSearch">
+              <span>当前结果</span>
+              <strong>{{ filteredAgents.length }}</strong>
+            </button>
+            <button class="insight-tile" type="button" @click="handleAdd">
+              <span>快速添加</span>
+              <strong>新助手</strong>
+            </button>
+          </div>
+
+          <div class="spotlight-card" v-if="featuredAgent">
+            <div>
+              <span class="spotlight-label">推荐助手</span>
+              <strong>{{ featuredAgent.name }}</strong>
+              <p>{{ featuredAgent.description }}</p>
+            </div>
+            <div class="spotlight-actions">
+              <button type="button" class="spotlight-btn ghost" @click="rotateFeaturedAgent">换一个</button>
+              <button type="button" class="spotlight-btn primary" @click="openAgentModal(featuredAgent)">查看详情</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -17,7 +48,7 @@
           :key="category.name"
           class="category-item"
           :class="{ active: currentCategory === category.name }"
-          @click="currentCategory = category.name"
+          @click="selectCategory(category.name)"
         >
           <span>{{ category.name }}</span>
           <span class="count">{{ category.count }}</span>
@@ -27,19 +58,19 @@
       <main>
         <div class="list-header">
           <div class="list-title">
-            <span>{{ groupIconMap[currentCategory as keyof typeof groupIconMap] || '🎯' }}</span>
+            <span class="title-mark"></span>
             <span>{{ currentCategory }}</span>
             <span class="tag-count">{{ filteredAgents.length }}</span>
           </div>
           <div class="header-buttons">
-            <input type="text" v-model="searchQuery" placeholder="搜索助手..." class="search-input" style="margin-right: 8px;">
+            <input ref="searchInputRef" type="text" v-model="searchQuery" placeholder="搜索助手..." class="search-input" style="margin-right: 8px;">
             <button class="header-btn" @click="handleImport">
               <i class="fa fa-upload"></i> 导入
             </button>
             <button class="header-btn" @click="handleManage">
               <i class="fa fa-gear"></i> 管理
             </button>
-            <button class="header-btn" style="color: #6366f1;" @click="handleAdd">
+            <button class="header-btn" style="color: #3bb36b;" @click="handleAdd">
               <i class="fa fa-plus"></i> 添加
             </button>
           </div>
@@ -71,47 +102,49 @@
       </main>
     </div>
 
-    <div id="agentModal" class="modal-overlay" v-if="showModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <span id="modalEmoji" style="font-size: 36px;">{{ selectedAgent?.emoji }}</span>
-            <div>
-              <h2 id="modalName" style="font-size: 20px; font-weight: 600;">{{ selectedAgent?.name }}</h2>
-              <div id="modalTags" style="display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap;">
-                <span v-for="(tag, index) in selectedAgent?.group" :key="index" class="card-tag">{{ tag }}</span>
+    <Teleport to="body">
+      <div id="agentModal" class="modal-overlay" v-if="showModal">
+        <div class="modal-content agent-detail-modal">
+          <div class="modal-header">
+            <div class="modal-identity">
+              <span id="modalEmoji" class="modal-emoji">{{ selectedAgent?.emoji }}</span>
+              <div class="modal-title-block">
+                <h2 id="modalName">{{ selectedAgent?.name }}</h2>
+                <div id="modalTags" class="modal-tags">
+                  <span v-for="(tag, index) in selectedAgent?.group" :key="index" class="card-tag">{{ tag }}</span>
+                </div>
               </div>
             </div>
+            <button id="closeModalBtn" class="modal-close-btn" @click="showModal = false">
+              <i class="fa fa-times"></i>
+            </button>
           </div>
-          <button id="closeModalBtn" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #9ca3af;" @click="showModal = false">
-            <i class="fa fa-times"></i>
-          </button>
-        </div>
-        <div class="modal-body">
-          <div class="modal-section">
-            <div class="modal-section-title">描述</div>
-            <div id="modalDescription" class="modal-section-content">{{ selectedAgent?.description }}</div>
+          <div class="modal-body">
+            <div class="modal-section">
+              <div class="modal-section-title">描述</div>
+              <div id="modalDescription" class="modal-section-content">{{ selectedAgent?.description }}</div>
+            </div>
+            <div class="modal-section">
+              <div class="modal-section-title">提示词</div>
+              <div id="modalPrompt" class="modal-section-content">{{ selectedAgent?.prompt }}</div>
+            </div>
           </div>
-          <div class="modal-section">
-            <div class="modal-section-title">提示词</div>
-            <div id="modalPrompt" class="modal-section-content">{{ selectedAgent?.prompt }}</div>
-          </div>
-          <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-            <button id="cancelModalBtn" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; cursor: pointer;" @click="showModal = false">关闭</button>
-            <button id="addToMyBtn" style="padding: 8px 16px; border-radius: 8px; border: none; background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%); color: white; cursor: pointer;" @click="addToAgentWorkshop">
+          <div class="modal-actions">
+            <button id="cancelModalBtn" @click="showModal = false">关闭</button>
+            <button id="addToMyBtn" @click="addToAgentWorkshop">
               <i class="fa fa-plus"></i> 添加到智能体工坊
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <div v-if="showToast" class="toast">{{ toastMessage }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { usePersonaStore } from '@/stores/persona';
 
@@ -125,6 +158,8 @@ const showModal = ref(false);
 const selectedAgent = ref<any>(null);
 const showToast = ref(false);
 const toastMessage = ref('');
+const featuredIndex = ref(0);
+const searchInputRef = ref<HTMLInputElement | null>(null);
 
 // 分类图标映射
 const groupIconMap = {
@@ -766,6 +801,12 @@ const categories = computed(() => {
   return categoryList;
 });
 
+const topCategory = computed(() => {
+  return categories.value
+    .filter(category => category.name !== '所有')
+    .sort((a, b) => b.count - a.count)[0] || null;
+});
+
 // 过滤助手
 const filteredAgents = computed(() => {
   let agents = systemAgents.value;
@@ -786,7 +827,40 @@ const filteredAgents = computed(() => {
   return agents;
 });
 
+const featuredAgent = computed(() => {
+  if (!filteredAgents.value.length) return null;
+  return filteredAgents.value[featuredIndex.value % filteredAgents.value.length];
+});
+
+watch(
+  () => [currentCategory.value, searchQuery.value, filteredAgents.value.length],
+  () => {
+    if (featuredIndex.value >= filteredAgents.value.length) {
+      featuredIndex.value = 0;
+    }
+  }
+);
+
 // 方法
+const selectCategory = (category: string) => {
+  currentCategory.value = category;
+  searchQuery.value = '';
+  featuredIndex.value = 0;
+};
+
+const resetFilters = () => {
+  selectCategory('所有');
+};
+
+const focusSearch = () => {
+  searchInputRef.value?.focus();
+};
+
+const rotateFeaturedAgent = () => {
+  if (!filteredAgents.value.length) return;
+  featuredIndex.value = (featuredIndex.value + 1) % filteredAgents.value.length;
+};
+
 const openAgentModal = (agent: any) => {
   selectedAgent.value = agent;
   showModal.value = true;
@@ -849,7 +923,7 @@ onMounted(() => {
 <style scoped>
 .assistant-view {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: transparent;
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -857,47 +931,174 @@ onMounted(() => {
 }
 
 .welcome-section {
-  text-align: center;
-  margin-bottom: 32px;
-  padding: 40px 20px;
-  background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%);
-  border-radius: 20px;
-  color: white;
-  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+  margin-bottom: 28px;
 }
 
 .welcome-content {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(520px, 1.1fr);
   align-items: center;
-  justify-content: center;
-  gap: 24px;
-  flex-wrap: wrap;
+  gap: 28px;
+  padding: 30px 34px;
+  background: #3bb36b;
+  border-radius: 18px;
+  color: #ffffff;
+  box-shadow: 0 18px 44px rgba(59, 179, 107, 0.22);
+  position: relative;
+  overflow: hidden;
+}
+
+.welcome-content::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.14), transparent 34%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 58px);
+  pointer-events: none;
 }
 
 .welcome-text {
-  flex: 1;
-  min-width: 200px;
+  position: relative;
+  z-index: 1;
 }
 
 .welcome-title {
-  font-size: 32px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 800;
   margin: 0 0 8px;
-  background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #ffffff;
+  letter-spacing: 0;
 }
 
 .welcome-subtitle {
-  font-size: 16px;
+  font-size: 15px;
   margin: 0;
-  opacity: 0.9;
+  color: rgba(255, 255, 255, 0.9);
 }
 
-.greeting-emoji {
-  font-size: 48px;
-  flex-shrink: 0;
+.welcome-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(240px, 0.9fr);
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.insight-tile {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.13);
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+  min-width: 0;
+}
+
+.insight-tile:hover,
+.insight-tile.active {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.65);
+}
+
+.insight-tile span {
+  display: block;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.insight-tile strong {
+  display: block;
+  margin-top: 6px;
+  color: #ffffff;
+  font-size: 20px;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spotlight-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(18, 79, 47, 0.23);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.spotlight-label {
+  display: block;
+  margin-bottom: 6px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.spotlight-card strong {
+  display: block;
+  color: #ffffff;
+  font-size: 17px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spotlight-card p {
+  margin: 6px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.spotlight-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.spotlight-btn {
+  height: 30px;
+  border-radius: 8px;
+  padding: 0 12px;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.spotlight-btn:hover {
+  transform: translateY(-1px);
+}
+
+.spotlight-btn.ghost {
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  background: transparent;
+}
+
+.spotlight-btn.primary {
+  color: #24834f;
+  border: 1px solid #ffffff;
+  background: #ffffff;
+  font-weight: 700;
 }
 
 .page-header {
@@ -911,7 +1112,7 @@ onMounted(() => {
 .search-input {
   width: 300px;
   padding: 10px 16px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e8f0ea;
   border-radius: 8px;
   font-size: 14px;
   transition: all 0.3s ease;
@@ -919,8 +1120,8 @@ onMounted(() => {
 
 .search-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #3bb36b;
+  box-shadow: 0 0 0 3px rgba(59, 179, 107, 0.1);
 }
 
 .page-content {
@@ -953,11 +1154,11 @@ onMounted(() => {
 }
 
 .category-item:hover {
-  background: #f5f7fa;
+  background: #ebf7ee;
 }
 
 .category-item.active {
-  background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%);
+  background: #3bb36b;
   color: white;
   font-weight: 500;
 }
@@ -986,7 +1187,7 @@ main {
 
 .list-header {
   padding: 20px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e8f0ea;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -998,15 +1199,24 @@ main {
   gap: 12px;
   font-size: 18px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: #1a1d1e;
+}
+
+.title-mark {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  background: #3bb36b;
+  box-shadow: 0 0 0 5px rgba(59, 179, 107, 0.12);
+  flex-shrink: 0;
 }
 
 .tag-count {
   font-size: 14px;
-  background: #f5f7fa;
+  background: #f2f7f3;
   padding: 2px 8px;
   border-radius: 10px;
-  color: #666;
+  color: #6b7280;
   font-weight: normal;
 }
 
@@ -1017,7 +1227,7 @@ main {
 
 .header-btn {
   padding: 8px 16px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e8f0ea;
   background: white;
   border-radius: 8px;
   cursor: pointer;
@@ -1029,8 +1239,8 @@ main {
 }
 
 .header-btn:hover {
-  border-color: #667eea;
-  color: #667eea;
+  border-color: #3bb36b;
+  color: #3bb36b;
 }
 
 .agents-grid {
@@ -1045,7 +1255,7 @@ main {
 
 .agent-card {
   background: white;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e8f0ea;
   border-radius: 12px;
   padding: 24px;
   cursor: pointer;
@@ -1059,8 +1269,8 @@ main {
 
 .agent-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
-  border-color: #667eea;
+  box-shadow: 0 8px 24px rgba(59, 179, 107, 0.15);
+  border-color: #3bb36b;
 }
 
 .card-bg {
@@ -1093,7 +1303,7 @@ main {
 .card-title {
   font-size: 20px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: #1a1d1e;
   margin-bottom: 8px;
 }
 
@@ -1106,9 +1316,9 @@ main {
 .card-tag {
   font-size: 13px;
   padding: 4px 12px;
-  background: #f0f0f0;
+  background: #ebf7ee;
   border-radius: 14px;
-  color: #666;
+  color: #6b7280;
 }
 
 .card-desc {
@@ -1121,7 +1331,7 @@ main {
 
 .card-desc-text {
   font-size: 15px;
-  color: #666;
+  color: #6b7280;
   line-height: 1.5;
 }
 
@@ -1144,55 +1354,144 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 5000;
 }
 
 .modal-content {
+  position: relative;
+  z-index: 1;
   background: white;
   border-radius: 16px;
   width: 90%;
-  max-width: 600px;
-  max-height: 80vh;
-  overflow-y: auto;
+  max-width: 980px;
+  max-height: min(86vh, 760px);
+  overflow: hidden;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
-  padding: 24px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e8f0ea;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 16px;
+  flex: 0 0 auto;
+}
+
+.modal-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.modal-emoji {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: #f2f7f3;
+  font-size: 30px;
+  flex: 0 0 auto;
+}
+
+.modal-title-block {
+  min-width: 0;
+}
+
+.modal-title-block h2 {
+  margin: 0;
+  color: #141816;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.modal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.modal-close-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 18px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.modal-close-btn:hover {
+  background: #f2f7f3;
+  color: #3bb36b;
 }
 
 .modal-body {
-  padding: 24px;
+  min-height: 0;
+  padding: 18px 24px;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
+  gap: 16px;
+  overflow: hidden;
 }
 
 .modal-section {
-  margin-bottom: 20px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-section-title {
   font-size: 14px;
   font-weight: 600;
-  color: #666;
+  color: #6b7280;
   margin-bottom: 8px;
 }
 
 .modal-section-content {
+  min-height: 0;
   font-size: 14px;
   line-height: 1.6;
-  color: #333;
+  color: #1a1d1e;
   white-space: pre-wrap;
-  background: #f9f9f9;
+  background: #f2f7f3;
   padding: 16px;
   border-radius: 8px;
+  overflow: auto;
+}
+
+#modalDescription {
+  max-height: 260px;
+}
+
+#modalPrompt {
+  flex: 1;
+  max-height: calc(86vh - 220px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+}
+
+.modal-actions {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid #e8f0ea;
+  background: #ffffff;
 }
 
 #cancelModalBtn {
   padding: 8px 16px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e8f0ea;
   background: white;
   border-radius: 8px;
   cursor: pointer;
@@ -1200,14 +1499,14 @@ main {
 }
 
 #cancelModalBtn:hover {
-  border-color: #667eea;
-  color: #667eea;
+  border-color: #3bb36b;
+  color: #3bb36b;
 }
 
 #addToMyBtn {
   padding: 8px 16px;
   border: none;
-  background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%);
+  background: #3bb36b;
   color: white;
   border-radius: 8px;
   cursor: pointer;
@@ -1217,18 +1516,18 @@ main {
 
 #addToMyBtn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 12px rgba(59, 179, 107, 0.3);
 }
 
 .toast {
   position: fixed;
   top: 20px;
   right: 20px;
-  background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%);
+  background: #3bb36b;
   color: white;
   padding: 12px 20px;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 12px rgba(59, 179, 107, 0.3);
   z-index: 1001;
   animation: slideIn 0.3s ease-out;
 }
@@ -1262,14 +1561,30 @@ main {
   background: #a1a1a1;
 }
 
+@media (max-width: 1280px) {
+  .welcome-content,
+  .welcome-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .insight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 768px) {
   .assistant-view {
     padding: 16px;
   }
   
   .welcome-content {
-    flex-direction: column;
-    text-align: center;
+    grid-template-columns: 1fr;
+    padding: 24px;
+  }
+
+  .welcome-panel,
+  .insight-grid {
+    grid-template-columns: 1fr;
   }
   
   .welcome-title {
@@ -1296,6 +1611,26 @@ main {
   .modal-content {
     width: 95%;
     margin: 20px;
+    max-height: calc(100vh - 40px);
+  }
+
+  .modal-body {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  #modalDescription,
+  #modalPrompt {
+    max-height: none;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  #cancelModalBtn,
+  #addToMyBtn {
+    width: 100%;
   }
 }
 </style>

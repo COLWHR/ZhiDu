@@ -65,20 +65,20 @@ def test_post_message_persona_not_found(client):
     )
     assert response.status_code == 404
 
-def test_chat_agent_invalid_initialization(client):
-    # Mocking failure during agent init inside endpoint
+def test_chat_agent_model_failure_returns_error(client):
     from unittest.mock import patch
-    with patch("app.api.v1.endpoints.agents.ParticipantAgent", side_effect=Exception("Init Failed")):
+
+    with patch("app.api.v1.endpoints.agents.get_chat_completion", side_effect=Exception("Init Failed")):
         response = client.post(
             "/api/v1/agents/chat",
             json={
                 "agent_name": "FailAgent",
                 "persona_json": {"name": "Fail"},
-                "context_messages": []
+                "context_messages": [{"speaker": "user", "content": "hello"}]
             }
         )
-        assert response.status_code == 400
-        assert "Failed to initialize agent" in response.json()["detail"]
+        assert response.status_code == 500
+        assert "Agent failed: Init Failed" in response.json()["detail"]
 
 
 def test_chat_agent_stream_falls_back_when_llm_unavailable(client):
@@ -115,7 +115,7 @@ def test_chat_agent_stream_falls_back_when_llm_unavailable(client):
     assert response.status_code == 200
     body = response.text
     assert "上游模型鉴权失败" in body
-    assert "API_KEY" in body
+    assert '"kind": "auth"' in body
 
 
 def test_chat_completion_rejects_placeholder_api_key(monkeypatch):
@@ -155,7 +155,7 @@ def test_chat_agent_direct_endpoint_uses_llm_fallback(client):
     }
 
     with patch(
-        "app.api.v1.endpoints.agents.ParticipantAgent.think",
+        "app.api.v1.endpoints.agents.get_chat_completion",
         side_effect=LLMServiceError(
             kind="auth",
             message="API_KEY 仍是示例占位符，请替换为真实密钥后再试。",
@@ -190,3 +190,90 @@ def test_chat_history_accepts_integer_timestamp(client):
     data = response.json()
     assert data[0]["timestamp"] == 1710000000000
     assert data[1]["timestamp"] == 1710000000123
+
+
+def test_chat_completion_falls_back_to_text_model_after_vision_failure(monkeypatch):
+    import utils
+    from requests.exceptions import RequestException
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(utils.settings, "VOLC_API_KEY", "volc-key", raising=False)
+    monkeypatch.setattr(utils.settings, "VOLC_BASE_URL", "https://example.invalid/api/v3/", raising=False)
+    monkeypatch.setattr(utils.settings, "API_KEY", "text-key", raising=False)
+    monkeypatch.setattr(utils.settings, "BASE_URL", "https://open.bigmodel.cn/api/paas/v4/", raising=False)
+    monkeypatch.setattr(utils.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(utils.requests, "post", Mock(side_effect=RequestException("vision unavailable")))
+
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=Mock(
+                    return_value=SimpleNamespace(
+                        choices=[SimpleNamespace(message=SimpleNamespace(content="fallback ok"))]
+                    )
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(utils, "_build_llm_client", lambda: fake_client)
+
+    response = utils.get_chat_completion(
+        [{"role": "user", "content": "hello"}],
+        use_vision=True,
+        raise_error=True,
+    )
+
+    assert response.choices[0].message.content == "fallback ok"
+    assert fake_client.chat.completions.create.call_count == 1
+
+
+def test_chat_completion_sanitizes_multimodal_messages_when_vision_is_unreachable(monkeypatch):
+    import utils
+    from requests.exceptions import RequestException
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(utils.settings, "VOLC_API_KEY", "volc-key", raising=False)
+    monkeypatch.setattr(utils.settings, "VOLC_BASE_URL", "https://example.invalid/api/v3/", raising=False)
+    monkeypatch.setattr(utils.settings, "API_KEY", "text-key", raising=False)
+    monkeypatch.setattr(utils.settings, "BASE_URL", "https://open.bigmodel.cn/api/paas/v4/", raising=False)
+    monkeypatch.setattr(utils.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(utils.requests, "post", Mock(side_effect=RequestException("Failed to resolve host")))
+
+    captured = {}
+
+    def _create(**kwargs):
+        captured["messages"] = kwargs["messages"]
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="fallback ok"))]
+        )
+
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=_create)
+        )
+    )
+    monkeypatch.setattr(utils, "_build_llm_client", lambda: fake_client)
+
+    response = utils.get_chat_completion(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "请看这张图"},
+                    {"type": "image_url", "image_url": {"url": "https://cdn.example.com/uploads/demo/cat.png"}},
+                ],
+            }
+        ],
+        use_vision=True,
+        raise_error=True,
+    )
+
+    assert response.choices[0].message.content == "fallback ok"
+    assert utils.requests.post.call_count == 1
+    assert captured["messages"][0]["content"] == "请看这张图\n[image: cat.png]"
+    assert all(
+        not isinstance(message.get("content"), list)
+        for message in captured["messages"]
+    )

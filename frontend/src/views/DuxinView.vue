@@ -118,7 +118,12 @@
 
         <template v-if="assignedCounselor">
           <div class="counselor-avatar">
-            {{ assignedCounselor.name.slice(0, 1) }}
+            <img
+              v-if="getCounselorAvatarSrc(assignedCounselor)"
+              :src="getCounselorAvatarSrc(assignedCounselor)"
+              :alt="assignedCounselor.name"
+            />
+            <template v-else>{{ getAvatarInitial(assignedCounselor.name, '渡') }}</template>
           </div>
           <h2>智小渡建议先见 {{ assignedCounselor.name }}</h2>
           <p class="assignment-reason">{{ store.teamPlan?.handoff_reason }}</p>
@@ -180,7 +185,12 @@
           :class="item.role"
         >
           <a-avatar class="message-avatar" :style="messageAvatarStyle(item.role)">
-            {{ item.role === 'user' ? userInitial : assistantInitial(item) }}
+            <img
+              v-if="getMessageAvatarSrc(item)"
+              :src="getMessageAvatarSrc(item)"
+              :alt="speakerName(item)"
+            />
+            <template v-else>{{ item.role === 'user' ? userInitial : assistantInitial(item) }}</template>
           </a-avatar>
           <div class="message-body">
             <div class="message-meta">
@@ -194,7 +204,14 @@
         </div>
 
         <div v-if="store.streaming" class="message-row assistant">
-          <a-avatar class="message-avatar" :style="assistantAvatarStyle">渡</a-avatar>
+          <a-avatar class="message-avatar" :style="assistantAvatarStyle">
+            <img
+              v-if="streamingAssistantAvatarSrc"
+              :src="streamingAssistantAvatarSrc"
+              :alt="assignedCounselor?.name || '智小渡'"
+            />
+            <template v-else>渡</template>
+          </a-avatar>
           <div class="message-body">
             <div class="message-meta">
               <strong>{{ assignedCounselor?.name || '智小渡' }}</strong>
@@ -268,6 +285,7 @@ import { marked } from 'marked'
 import { useAuthStore } from '@/stores/auth'
 import { useDuxinStore } from '@/stores/duxin'
 import type { DuxinMessage, DuxinMode, DuxinTeamMember } from '@/types/duxin'
+import { generatePersonaAvatar, getAvatarInitial, resolveBuiltInUserAvatarSrc } from '@/utils/avatar'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -366,6 +384,8 @@ const visibleTeamMembers = computed(() => {
 
 const userInitial = computed(() => authStore.user?.username?.slice(0, 1).toUpperCase() || '你')
 
+const userAvatarSrc = computed(() => resolveBuiltInUserAvatarSrc(authStore.user))
+
 const flowStatus = computed(() => {
   if (store.streaming) return '智小渡正在判断'
   if (assignedCounselor.value) return `已分配：${assignedCounselor.value.name}`
@@ -429,7 +449,7 @@ const riskBanner = computed(() => {
 })
 
 const assistantAvatarStyle = {
-  background: 'linear-gradient(135deg, #4facfe 0%, #00d2d3 100%)',
+  background: '#3bb36b',
   color: '#fff'
 }
 
@@ -470,7 +490,7 @@ const renderMarkdown = (content: string) => marked.parse(content || '') as strin
 const messageAvatarStyle = (role: DuxinMessage['role']) => {
   if (role === 'user') {
     return {
-      background: 'linear-gradient(135deg, #6654f1 0%, #a18cd1 100%)',
+      background: '#3bb36b',
       color: '#fff'
     }
   }
@@ -485,6 +505,23 @@ const speakerName = (item: DuxinMessage) => {
   const counselor = team?.members?.find(member => member.key !== 'zhidu')
   return counselor?.name || item.agent_name || '智小渡'
 }
+
+const getCounselorAvatarSrc = (member?: DuxinTeamMember | null) => {
+  if (!member) return ''
+  return generatePersonaAvatar(member.name, member.focus, member.style)
+}
+
+const getMessageAvatarSrc = (item: DuxinMessage) => {
+  if (item.role === 'user') return userAvatarSrc.value
+  const team = item.metadata?.team
+  const counselor = team?.members?.find(member => member.key !== 'zhidu')
+  if (counselor) return getCounselorAvatarSrc(counselor)
+  return generatePersonaAvatar(speakerName(item), item.agent_name || 'duxin', 'conversation')
+}
+
+const streamingAssistantAvatarSrc = computed(() => {
+  return getCounselorAvatarSrc(assignedCounselor.value) || generatePersonaAvatar('智小渡', 'support', 'streaming')
+})
 
 const scrollToBottom = async () => {
   await nextTick()
@@ -641,8 +678,8 @@ onMounted(async () => {
   color: #fff;
   font-size: 28px;
   font-weight: 800;
-  background: linear-gradient(-225deg, #69eacb 0%, #eaccf8 48%, #6654f1 100%);
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  background: #3bb36b;
+  box-shadow: 0 4px 15px rgba(59, 179, 107, 0.3);
 }
 
 .header-title {
@@ -652,7 +689,7 @@ onMounted(async () => {
 }
 
 .title {
-  color: #1a1a2e;
+  color: #1a1d1e;
   font-size: 28px;
   font-weight: 700;
   line-height: 1.2;
@@ -672,7 +709,7 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #667eea;
+  color: #3bb36b;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0;
@@ -681,7 +718,7 @@ onMounted(async () => {
 .hero-status {
   min-width: 224px;
   padding: 16px 18px;
-  border: 1px solid rgba(102, 126, 234, 0.14);
+  border: 1px solid rgba(59, 179, 107, 0.14);
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
@@ -690,7 +727,7 @@ onMounted(async () => {
 .hero-status strong {
   display: block;
   margin-top: 5px;
-  color: #1a1a2e;
+  color: #1a1d1e;
   font-size: 17px;
 }
 
@@ -733,20 +770,20 @@ onMounted(async () => {
   gap: 12px;
   min-height: 74px;
   padding: 14px;
-  border: 1px solid #eef0f5;
+  border: 1px solid #e8f0ea;
   border-radius: 12px;
-  background: #f8f9fb;
+  background: #f8faf8;
   transition: all 0.3s ease;
 }
 
 .flow-step.active {
-  border-color: rgba(102, 126, 234, 0.22);
-  background: linear-gradient(135deg, rgba(105, 234, 203, 0.18) 0%, rgba(234, 204, 248, 0.24) 48%, rgba(102, 84, 241, 0.12) 100%);
-  box-shadow: 0 8px 22px rgba(102, 126, 234, 0.1);
+  border-color: rgba(59, 179, 107, 0.22);
+  background: rgba(59, 179, 107, 0.14);
+  box-shadow: 0 8px 22px rgba(59, 179, 107, 0.1);
 }
 
 .flow-step span {
-  color: #667eea;
+  color: #3bb36b;
   font-weight: 800;
 }
 
@@ -756,19 +793,19 @@ onMounted(async () => {
 }
 
 .flow-step strong {
-  color: #1a1a2e;
+  color: #1a1d1e;
 }
 
 .flow-step small {
   margin-top: 2px;
-  color: #888;
+  color: #787f84;
 }
 
 .intake-head h2,
 .assignment-card h2,
 .conversation-head h2 {
   margin: 6px 0 8px;
-  color: #1a1a2e;
+  color: #1a1d1e;
   letter-spacing: 0;
 }
 
@@ -786,9 +823,7 @@ onMounted(async () => {
   padding: 18px;
   border: 1px solid rgba(52, 105, 99, 0.12);
   border-radius: 14px;
-  background:
-    linear-gradient(135deg, rgba(244, 251, 248, 0.96), rgba(250, 247, 255, 0.96)),
-    #fff;
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .companion-heading {
@@ -815,7 +850,7 @@ onMounted(async () => {
 .companion-option {
   min-height: 104px;
   padding: 14px;
-  border: 1px solid rgba(102, 126, 234, 0.12);
+  border: 1px solid rgba(59, 179, 107, 0.12);
   border-radius: 12px;
   text-align: left;
   background: rgba(255, 255, 255, 0.72);
@@ -858,18 +893,18 @@ onMounted(async () => {
 .preset-chip {
   height: 36px;
   padding: 0 14px;
-  border: 1px solid #e9e6ff;
+  border: 1px solid #d4e8d9;
   border-radius: 999px;
-  color: #667eea;
-  background: #f5f3ff;
+  color: #3bb36b;
+  background: #ebf7ee;
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
 .preset-chip:hover {
-  border-color: #c9c2ff;
-  color: #764ba2;
-  background: #efebff;
+  border-color: #a8d5b5;
+  color: #2fa15c;
+  background: #dff0e3;
   transform: translateY(-1px);
 }
 
@@ -907,8 +942,8 @@ onMounted(async () => {
 }
 
 .state-dot.active {
-  background: #71c9ce;
-  box-shadow: 0 0 0 6px rgba(113, 201, 206, 0.16);
+  background: #3bb36b;
+  box-shadow: 0 0 0 6px rgba(59, 179, 107, 0.16);
 }
 
 .action-buttons,
@@ -923,13 +958,13 @@ onMounted(async () => {
   border-radius: 12px;
   border: none;
   font-weight: 600;
-  background: linear-gradient(-225deg, #69eacb 0%, #eaccf8 48%, #6654f1 100%);
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  background: #3bb36b;
+  box-shadow: 0 4px 15px rgba(59, 179, 107, 0.3);
 }
 
 .send-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 6px 20px rgba(59, 179, 107, 0.4);
 }
 
 .assignment-card {
@@ -954,12 +989,19 @@ onMounted(async () => {
   color: #fff;
   font-size: 28px;
   font-weight: 800;
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  background: #3bb36b;
+}
+
+.counselor-avatar img,
+.message-avatar :deep(.ant-avatar img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .waiting-mark {
-  color: #667eea;
-  background: #f5f3ff;
+  color: #3bb36b;
+  background: #ebf7ee;
   font-size: 30px;
 }
 
@@ -975,12 +1017,12 @@ onMounted(async () => {
 }
 
 .counselor-detail span {
-  color: #888;
+  color: #787f84;
   font-size: 12px;
 }
 
 .counselor-detail strong {
-  color: #1a1a2e;
+  color: #1a1d1e;
   font-weight: 700;
 }
 
@@ -994,8 +1036,8 @@ onMounted(async () => {
 .team-line span {
   padding: 6px 10px;
   border-radius: 999px;
-  color: #667eea;
-  background: #f5f3ff;
+  color: #3bb36b;
+  background: #ebf7ee;
   font-size: 12px;
 }
 
@@ -1016,19 +1058,19 @@ onMounted(async () => {
   place-items: center;
   min-height: 220px;
   text-align: center;
-  color: #888;
+  color: #787f84;
 }
 
 .empty-conversation :deep(svg) {
   width: 34px;
   height: 34px;
   margin-bottom: 8px;
-  color: #667eea;
+  color: #3bb36b;
 }
 
 .empty-conversation h3 {
   margin: 8px 0;
-  color: #1a1a2e;
+  color: #1a1d1e;
 }
 
 .message-row {
@@ -1081,14 +1123,14 @@ onMounted(async () => {
   padding: 14px 16px;
   border-radius: 16px;
   color: #24384a;
-  background: #f8f9fb;
+  background: #f8faf8;
   line-height: 1.75;
 }
 
 .message-bubble.user {
   color: #fff;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  box-shadow: 0 10px 24px rgba(102, 126, 234, 0.18);
+  background: #3bb36b;
+  box-shadow: 0 10px 24px rgba(59, 179, 107, 0.18);
 }
 
 .message-bubble :deep(p) {
@@ -1108,7 +1150,7 @@ onMounted(async () => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #667eea;
+  background: #3bb36b;
   animation: typingPulse 1s infinite ease-in-out;
 }
 
@@ -1136,24 +1178,24 @@ onMounted(async () => {
 .history-title strong {
   display: block;
   margin-top: 4px;
-  color: #1a1a2e;
+  color: #1a1d1e;
 }
 
 .history-item {
   min-width: 210px;
   padding: 12px;
-  border: 1px solid #eef0f5;
+  border: 1px solid #e8f0ea;
   border-radius: 12px;
   text-align: left;
-  background: #f8f9fb;
+  background: #f8faf8;
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
 .history-item.active,
 .history-item:hover {
-  border-color: rgba(102, 126, 234, 0.22);
-  background: #f5f3ff;
+  border-color: rgba(59, 179, 107, 0.22);
+  background: #ebf7ee;
   transform: translateY(-1px);
 }
 
@@ -1163,13 +1205,13 @@ onMounted(async () => {
 }
 
 .history-item span {
-  color: #1a1a2e;
+  color: #1a1d1e;
   font-weight: 700;
 }
 
 .history-item small {
   margin-top: 4px;
-  color: #888;
+  color: #787f84;
 }
 
 .human-care-strip {
@@ -1209,9 +1251,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background:
-    linear-gradient(135deg, rgba(255, 252, 245, 0.92), rgba(244, 251, 248, 0.94)),
-    #fff;
+  background: rgba(255, 255, 255, 0.93);
 }
 
 .plain-tool-button {

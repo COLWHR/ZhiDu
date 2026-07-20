@@ -6,9 +6,9 @@ import HomeView from '@/views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
 import RegisterView from '@/views/RegisterView.vue'
 import PersonaView from '@/views/PersonaView.vue'
-import ForumListView from '@/views/ForumListView.vue'
 import ForumDetailView from '@/views/ForumDetailView.vue'
 import AssistantView from '@/views/AssistantView.vue'
+import SkillRepositoryView from '@/views/SkillRepositoryView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -47,11 +47,6 @@ const router = createRouter({
           component: PersonaView
         },
         {
-          path: 'forums',
-          name: 'forums',
-          component: ForumListView
-        },
-        {
           path: 'forums/:id',
           name: 'forum-detail',
           component: ForumDetailView
@@ -60,6 +55,11 @@ const router = createRouter({
           path: 'assistants',
           name: 'assistants',
           component: AssistantView
+        },
+        {
+          path: 'assistants/skills',
+          name: 'assistant-skills',
+          component: SkillRepositoryView
         },
         {
           path: 'time-gate',

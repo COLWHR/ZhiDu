@@ -24,7 +24,8 @@
             @click="switchAgent(agent)"
           >
             <a-avatar size="small" :style="{ background: getAvatarGradient(agent.name) }">
-              {{ agent.name[0] }}
+              <img v-if="getAgentAvatarSrc(agent)" :src="getAgentAvatarSrc(agent)" :alt="agent.name" />
+              <template v-else>{{ getAvatarInitial(agent.name, '智') }}</template>
             </a-avatar>
             <div class="agent-info">
               <div class="agent-name">{{ agent.name }}</div>
@@ -67,12 +68,17 @@
           <div class="chat-header">
             <div class="current-agent-info">
               <a-avatar size="small" :style="{ background: getAvatarGradient(currentAgent.name) }">
-                {{ currentAgent.name[0] }}
+                <img v-if="getAgentAvatarSrc(currentAgent)" :src="getAgentAvatarSrc(currentAgent)" :alt="currentAgent.name" />
+                <template v-else>{{ getAvatarInitial(currentAgent.name, '智') }}</template>
               </a-avatar>
               <div class="agent-meta">
                 <span class="agent-name">{{ currentAgent.name }}</span>
                 <span class="agent-title">{{ currentAgent.title }}</span>
                 <span class="agent-bio">{{ currentAgentBio }}</span>
+                <div class="agent-tag-row">
+                  <span v-for="skill in currentAgentSkills" :key="skill" class="agent-chip">{{ skill }}</span>
+                  <span v-for="mode in currentAgentModalities" :key="mode" class="agent-chip ghost">{{ mode }}</span>
+                </div>
               </div>
             </div>
             <div class="header-actions">
@@ -90,16 +96,39 @@
             <div v-for="(msg, index) in messages" :key="index" class="message-item" :class="msg.role">
               <div v-if="msg.role === 'assistant'" class="message-avatar">
                 <a-avatar size="small" :style="{ background: getAvatarGradient(currentAgent.name) }">
-                  {{ currentAgent.name[0] }}
+                  <img v-if="getAgentAvatarSrc(currentAgent)" :src="getAgentAvatarSrc(currentAgent)" :alt="currentAgent.name" />
+                  <template v-else>{{ getAvatarInitial(currentAgent.name, '智') }}</template>
                 </a-avatar>
               </div>
               <div class="message-content">
                 <div class="message-bubble" v-html="formatMessage(msg.content)"></div>
+                <div v-if="msg.attachments?.length" class="message-attachments">
+                  <div v-for="attachment in msg.attachments" :key="attachment.id" class="attachment-card">
+                    <div class="attachment-preview" v-if="attachment.kind === 'image' && attachment.preview_url">
+                      <img :src="attachment.preview_url" :alt="attachment.file_name" />
+                    </div>
+                    <div class="attachment-meta">
+                      <div class="attachment-name">{{ attachment.file_name }}</div>
+                      <div class="attachment-sub">{{ attachment.kind || 'file' }}<span v-if="formatSize(attachment.size)"> · {{ formatSize(attachment.size) }}</span></div>
+                    </div>
+                    <a :href="attachment.storage_url" target="_blank" rel="noreferrer" class="attachment-link">打开</a>
+                  </div>
+                </div>
+                <div v-if="msg.artifacts?.length" class="message-artifacts">
+                  <div v-for="artifact in msg.artifacts" :key="artifact.id" class="artifact-card">
+                    <div>
+                      <div class="artifact-title">{{ artifact.file_name }}</div>
+                      <div class="artifact-sub">{{ artifact.artifact_type }} · {{ artifact.status || 'ready' }}</div>
+                    </div>
+                    <a :href="`${artifactDownloadBase}/${artifact.id}/download`" target="_blank" rel="noreferrer" class="artifact-link">下载</a>
+                  </div>
+                </div>
                 <div class="message-time">{{ formatTime(msg.timestamp) }}</div>
               </div>
               <div v-if="msg.role === 'user'" class="message-avatar">
-                <a-avatar size="small" style="background: #667eea">
-                  {{ authStore.user?.username?.[0] || '我' }}
+                <a-avatar size="small" style="background: #3bb36b">
+                  <img v-if="userAvatarSrc" :src="userAvatarSrc" :alt="authStore.user?.username || '用户'" />
+                  <template v-else>{{ getAvatarInitial(authStore.user?.username, '我') }}</template>
                 </a-avatar>
               </div>
             </div>
@@ -107,7 +136,8 @@
             <div v-if="loading" class="message-item assistant">
               <div class="message-avatar">
                 <a-avatar size="small" :style="{ background: getAvatarGradient(currentAgent.name) }">
-                  {{ currentAgent.name[0] }}
+                  <img v-if="getAgentAvatarSrc(currentAgent)" :src="getAgentAvatarSrc(currentAgent)" :alt="currentAgent.name" />
+                  <template v-else>{{ getAvatarInitial(currentAgent.name, '智') }}</template>
                 </a-avatar>
               </div>
               <div class="message-content">
@@ -124,21 +154,27 @@
           <div class="input-section">
             <div class="input-toolbar">
               <a-button type="text" size="small" @click="triggerImageUpload">
-                <picture-outlined /> 上传图片
+                <picture-outlined /> 上传附件
               </a-button>
-              <input 
-                ref="imageInput" 
-                type="file" 
-                accept="image/*" 
-                style="display: none" 
+              <input
+                ref="imageInput"
+                type="file"
+                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.json"
+                style="display: none"
                 @change="handleImageUpload"
               />
-              <span class="tip-text">支持粘贴图片（Ctrl+V）直接发送，上传后会自动转为可发送内容</span>
+              <span class="tip-text">支持图片、视频、音频、文件；粘贴图片（Ctrl+V）也会自动加入附件队列</span>
+            </div>
+            <div v-if="pendingAttachments.length" class="pending-attachments">
+              <div v-for="(attachment, index) in pendingAttachments" :key="attachment.id" class="pending-attachment">
+                <span class="pending-name">{{ attachment.file_name }}</span>
+                <button class="pending-remove" type="button" @click="removePendingAttachment(index)">移除</button>
+              </div>
             </div>
             <a-textarea
               v-model:value="inputMessage"
               :rows="3"
-              placeholder="请输入消息，按 Enter 发送，Shift+Enter 换行，支持粘贴图片"
+              placeholder="请输入消息，按 Enter 发送，Shift+Enter 换行"
               @keydown.enter="handleSend"
               @paste="handlePaste"
               :disabled="loading"
@@ -149,7 +185,7 @@
                 type="primary" 
                 @click="handleSend" 
                 :loading="loading"
-                :disabled="(!inputMessage.trim() && !uploadingImage) || !currentAgent"
+                :disabled="(!inputMessage.trim() && pendingAttachments.length === 0) || !currentAgent"
               >
                 <send-outlined /> 发送
               </a-button>
@@ -176,26 +212,66 @@ import {
 import { message } from 'ant-design-vue'
 import request from '@/utils/request'
 import { marked } from 'marked'
+import { getAvatarInitial, isImageAvatar, resolveBuiltInUserAvatarSrc } from '@/utils/avatar'
+
+type ChatAttachment = {
+  id: number
+  file_name: string
+  mime_type?: string | null
+  kind?: string | null
+  storage_url: string
+  preview_url?: string | null
+  size?: number | null
+  meta?: Record<string, any>
+}
+
+type ChatArtifact = {
+  id: number
+  artifact_type: string
+  file_name: string
+  mime_type?: string | null
+  storage_url: string
+  preview_url?: string | null
+  status?: string
+}
+
+type ChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+  isWelcome?: boolean
+  attachments?: ChatAttachment[]
+  artifacts?: ChatArtifact[]
+}
 
 const personaStore = usePersonaStore()
 const authStore = useAuthStore()
 const router = useRouter()
 
 const currentAgent = ref<any>(null)
-const messages = ref<Array<{ role: 'user' | 'assistant', content: string, timestamp: number, isWelcome?: boolean }>>([])
+const messages = ref<ChatMessage[]>([])
 const inputMessage = ref('')
 const loading = ref(false)
-const uploadingImage = ref(false)
+const uploadingAttachment = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 const imageInput = ref<HTMLInputElement | null>(null)
+const artifactDownloadBase = '/api/v1/artifacts'
+const pendingAttachments = ref<ChatAttachment[]>([])
 const currentAgentBio = computed(() => currentAgent.value?.bio?.trim() || '这位智能体还没有写简介。')
+const currentAgentSkills = computed(() => (currentAgent.value?.skills || []).slice(0, 4))
+const currentAgentModalities = computed(() => (currentAgent.value?.modalities || []).slice(0, 4))
 const currentConversationSummary = computed(() => {
   const userMessages = messages.value.filter(msg => !msg.isWelcome)
   return `${userMessages.length} 条消息`
 })
+const userAvatarSrc = computed(() => resolveBuiltInUserAvatarSrc(authStore.user))
+
+const getAgentAvatarSrc = (agent?: any) => {
+  return isImageAvatar(agent?.avatar) ? agent.avatar : ''
+}
 
 const getAvatarGradient = (name: string) => {
-  const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#30cfd0']
+  const colors = ['#3bb36b', '#2fa15c', '#1a1d1e', '#333333', '#6b7280', '#f59e0b', '#3b82f6', '#15803d']
   return colors[name.charCodeAt(0) % colors.length]
 }
 
@@ -214,6 +290,24 @@ const welcomeMessage = (agent: any) => ({
   isWelcome: true
 })
 
+const normalizeAttachment = (raw: any): ChatAttachment => ({
+  id: raw.id,
+  file_name: raw.file_name,
+  mime_type: raw.mime_type,
+  kind: raw.kind,
+  storage_url: raw.storage_url,
+  preview_url: raw.preview_url,
+  size: raw.size,
+  meta: raw.meta || {}
+})
+
+const formatSize = (size?: number | null) => {
+  if (!size || size <= 0) return ''
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
 const handleAddAgent = () => {
   message.info('请先去智能体工坊创建智能体')
   router.push('/personas')
@@ -223,12 +317,20 @@ const switchAgent = async (agent: any) => {
   currentAgent.value = agent
   messages.value = []
   inputMessage.value = ''
+  pendingAttachments.value = []
   loading.value = true
 
   try {
     const res = await request.get('/agents/chat/history/' + agent.id)
     if (res.data && res.data.length > 0) {
-      messages.value = res.data
+      messages.value = res.data.map((item: any) => ({
+        role: item.role,
+        content: item.content,
+        timestamp: item.timestamp || Date.now(),
+        isWelcome: false,
+        attachments: item.attachments || [],
+        artifacts: item.metadata?.artifacts || [],
+      }))
     } else {
       messages.value.push(welcomeMessage(agent))
     }
@@ -252,14 +354,31 @@ const handleSend = async (e?: KeyboardEvent) => {
   }
 
   const content = inputMessage.value.trim()
-  if (!content) return
+  if (!content && pendingAttachments.value.length === 0) return
 
-  messages.value.push({ role: 'user', content, timestamp: Date.now() })
+  const userAttachments = pendingAttachments.value.map(item => ({ ...item }))
+  messages.value.push({
+    role: 'user',
+    content: content || '发送了附件',
+    timestamp: Date.now(),
+    attachments: userAttachments,
+  })
   inputMessage.value = ''
   loading.value = true
 
   const assistantMsgIndex = messages.value.length
-  messages.value.push({ role: 'assistant', content: '', timestamp: Date.now() })
+  messages.value.push({ role: 'assistant', content: '', timestamp: Date.now(), artifacts: [] })
+  const outgoingAttachments = pendingAttachments.value.map(item => ({
+    id: item.id,
+    file_name: item.file_name,
+    mime_type: item.mime_type,
+    kind: item.kind,
+    storage_url: item.storage_url,
+    preview_url: item.preview_url,
+    size: item.size,
+    meta: item.meta || {},
+  }))
+  pendingAttachments.value = []
 
   await nextTick()
   scrollToBottom()
@@ -268,7 +387,12 @@ const handleSend = async (e?: KeyboardEvent) => {
     await request.post('/agents/chat/message', {
       persona_id: currentAgent.value.id,
       role: 'user',
-      content
+      content: content || '发送了附件',
+      message_type: outgoingAttachments.length > 0 ? 'mixed' : 'text',
+      attachment_ids: outgoingAttachments.map(item => item.id),
+      metadata: {
+        attachments: outgoingAttachments,
+      }
     })
 
     const contextMessages = messages.value
@@ -277,7 +401,8 @@ const handleSend = async (e?: KeyboardEvent) => {
       .map(msg => ({
         role: msg.role,
         speaker: msg.role === 'user' ? '用户' : currentAgent.value.name,
-        content: msg.content
+        content: msg.content,
+        attachments: msg.attachments || [],
       }))
 
     const response = await fetch('/api/v1/agents/chat/stream', {
@@ -290,7 +415,8 @@ const handleSend = async (e?: KeyboardEvent) => {
         agent_name: currentAgent.value.name,
         persona_json: currentAgent.value,
         context_messages: contextMessages,
-        theme: '自由对话'
+        theme: '自由对话',
+        attachments: outgoingAttachments,
       })
     })
 
@@ -328,6 +454,12 @@ const handleSend = async (e?: KeyboardEvent) => {
             messages.value[assistantMsgIndex].content += parsed.content
             await nextTick()
             scrollToBottom()
+          } else if (parsed.type === 'artifact' && parsed.artifact) {
+            const artifacts = messages.value[assistantMsgIndex].artifacts || []
+            artifacts.push(parsed.artifact)
+            messages.value[assistantMsgIndex].artifacts = artifacts
+            await nextTick()
+            scrollToBottom()
           } else if (parsed.error) {
             throw new Error(parsed.error)
           }
@@ -344,7 +476,11 @@ const handleSend = async (e?: KeyboardEvent) => {
     await request.post('/agents/chat/message', {
       persona_id: currentAgent.value.id,
       role: 'assistant',
-      content: messages.value[assistantMsgIndex].content
+      content: messages.value[assistantMsgIndex].content || '已完成回复',
+      message_type: messages.value[assistantMsgIndex].artifacts?.length ? 'artifact' : 'text',
+      metadata: {
+        artifacts: messages.value[assistantMsgIndex].artifacts || [],
+      }
     })
   } catch (error) {
     console.error('对话失败:', error)
@@ -356,7 +492,8 @@ const handleSend = async (e?: KeyboardEvent) => {
     await request.post('/agents/chat/message', {
       persona_id: currentAgent.value.id,
       role: 'assistant',
-      content: messages.value[assistantMsgIndex].content
+      content: messages.value[assistantMsgIndex].content,
+      message_type: 'text',
     })
   } finally {
     loading.value = false
@@ -371,6 +508,7 @@ const clearChat = async () => {
   try {
     await request.delete('/agents/chat/history/' + currentAgent.value.id)
     inputMessage.value = ''
+    pendingAttachments.value = []
     messages.value = [welcomeMessage(currentAgent.value)]
     message.success('对话历史已清空')
     await nextTick()
@@ -393,35 +531,34 @@ const triggerImageUpload = () => {
 }
 
 const uploadAndInsertImage = async (file: File) => {
-  if (!file.type.startsWith('image/')) {
-    message.error('请选择图片文件')
+  if (!file) {
     return
   }
 
   if (file.size > 10 * 1024 * 1024) {
-    message.error('图片大小不能超过 10MB')
+    message.error('文件大小不能超过 10MB')
     return
   }
 
-  uploadingImage.value = true
+  uploadingAttachment.value = true
 
   try {
     const formData = new FormData()
     formData.append('file', file)
 
-    const res = await request.post('/upload/image', formData)
+    const res = await request.post('/upload/asset', formData)
 
-    if (res.data && res.data.url) {
-      inputMessage.value += `![image](${res.data.url})\n`
-      message.success('图片上传成功')
+    if (res.data) {
+      pendingAttachments.value.push(normalizeAttachment(res.data))
+      message.success('附件上传成功')
     } else {
-      throw new Error('上传失败，未返回图片 URL')
+      throw new Error('上传失败，未返回附件信息')
     }
   } catch (error) {
-    console.error('图片上传失败:', error)
-    message.error('图片上传失败，请稍后重试')
+    console.error('附件上传失败:', error)
+    message.error('附件上传失败，请稍后重试')
   } finally {
-    uploadingImage.value = false
+    uploadingAttachment.value = false
   }
 }
 
@@ -450,6 +587,10 @@ const handlePaste = async (e: ClipboardEvent) => {
   }
 }
 
+const removePendingAttachment = (index: number) => {
+  pendingAttachments.value.splice(index, 1)
+}
+
 onMounted(() => {
   personaStore.fetchPersonas(authStore.user?.id)
 })
@@ -459,10 +600,7 @@ onMounted(() => {
 .time-gate-page {
   position: relative;
   height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(102, 126, 234, 0.16), transparent 34%),
-    radial-gradient(circle at bottom right, rgba(113, 201, 206, 0.16), transparent 28%),
-    linear-gradient(180deg, #f8fbff 0%, #eef3f8 100%);
+  background: transparent;
   overflow: hidden;
 }
 
@@ -485,7 +623,7 @@ onMounted(() => {
   left: -100px;
   width: 260px;
   height: 260px;
-  background: radial-gradient(circle, rgba(102, 126, 234, 0.45) 0%, rgba(102, 126, 234, 0) 70%);
+  background: rgba(59, 179, 107, 0.18);
 }
 
 .orb-right {
@@ -493,7 +631,7 @@ onMounted(() => {
   bottom: -120px;
   width: 300px;
   height: 300px;
-  background: radial-gradient(circle, rgba(113, 201, 206, 0.38) 0%, rgba(113, 201, 206, 0) 68%);
+  background: rgba(105, 234, 203, 0.16);
 }
 
 .sider-section {
@@ -550,9 +688,9 @@ onMounted(() => {
 }
 
 .agent-item.active {
-  background: linear-gradient(135deg, #667eea 0%, #71c9ce 100%);
+  background: #3bb36b;
   color: white;
-  box-shadow: 0 16px 32px rgba(102, 126, 234, 0.24);
+  box-shadow: 0 16px 32px rgba(59, 179, 107, 0.24);
 }
 
 .agent-info {
@@ -572,7 +710,7 @@ onMounted(() => {
 
 .agent-title {
   font-size: 12px;
-  color: #888;
+  color: #787f84;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -584,7 +722,7 @@ onMounted(() => {
 
 .more-icon {
   font-size: 14px;
-  color: #888;
+  color: #787f84;
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -641,7 +779,7 @@ onMounted(() => {
   border-radius: 50%;
   font-size: 36px;
   color: #0f172a;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(113, 201, 206, 0.28));
+  background: rgba(59, 179, 107, 0.2);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
@@ -724,6 +862,30 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 
+.agent-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.agent-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #0f172a;
+  background: rgba(59, 179, 107, 0.12);
+  border: 1px solid rgba(59, 179, 107, 0.16);
+}
+
+.agent-chip.ghost {
+  color: #475569;
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -745,17 +907,15 @@ onMounted(() => {
 
 .status-pill.loading {
   color: #334155;
-  background: rgba(102, 126, 234, 0.14);
-  border-color: rgba(102, 126, 234, 0.18);
+  background: rgba(59, 179, 107, 0.14);
+  border-color: rgba(59, 179, 107, 0.18);
 }
 
 .messages-container {
   flex: 1;
   padding: 26px 24px 22px;
   overflow-y: auto;
-  background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.65), transparent 40%),
-    transparent;
+  background: transparent;
 }
 
 .message-item {
@@ -774,6 +934,14 @@ onMounted(() => {
   margin-top: 4px;
 }
 
+.agent-item :deep(.ant-avatar img),
+.current-agent-info :deep(.ant-avatar img),
+.message-avatar :deep(.ant-avatar img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .message-content {
   max-width: 70%;
 }
@@ -787,6 +955,103 @@ onMounted(() => {
   line-height: 1.6;
   word-break: break-word;
   backdrop-filter: blur(12px);
+}
+
+.message-attachments,
+.message-artifacts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.attachment-card,
+.artifact-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.attachment-preview {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.attachment-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-meta,
+.artifact-card > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.attachment-name,
+.artifact-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-sub,
+.artifact-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.attachment-link,
+.artifact-link {
+  font-size: 12px;
+  color: #3bb36b;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.pending-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.pending-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(59, 179, 107, 0.12);
+  border: 1px solid rgba(59, 179, 107, 0.16);
+}
+
+.pending-name {
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.pending-remove {
+  border: none;
+  background: transparent;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
 }
 
 .message-bubble p {
@@ -823,10 +1088,10 @@ onMounted(() => {
 }
 
 .message-item.user .message-bubble {
-  background: linear-gradient(135deg, #667eea 0%, #7c3aed 100%);
+  background: #3bb36b;
   color: white;
   border-color: transparent;
-  box-shadow: 0 14px 30px rgba(102, 126, 234, 0.22);
+  box-shadow: 0 14px 30px rgba(59, 179, 107, 0.22);
 }
 
 .message-item.user .message-bubble code,
@@ -856,7 +1121,7 @@ onMounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #888;
+  background: #787f84;
   animation: bounce 1.4s infinite ease-in-out both;
 }
 
@@ -953,5 +1218,3 @@ onMounted(() => {
   }
 }
 </style>
-
-

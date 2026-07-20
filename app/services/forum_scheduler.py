@@ -242,7 +242,7 @@ class ForumScheduler:
                     stream_id=str(uuid.uuid4())
                 )
                 
-                await self._broadcast_system_log(forum_id, f"瑙備紬 [{msg_data['speaker']}] 鍙戣█: {msg_data['content']}", "info")
+                await self._broadcast_system_log(forum_id, f"观众 [{msg_data['speaker']}] 发言: {msg_data['content']}", "info")
                 
             except Exception as e:
                 logger.error(f"Failed to process user message: {e}")
@@ -428,7 +428,7 @@ class ForumScheduler:
         
         try:
             # Persist the start log
-            await self._broadcast_system_log(forum_id, f"璁哄潧涓诲惊鐜惎鍔?.. (閰嶇疆: {ablation_flags})")
+            await self._broadcast_system_log(forum_id, f"论坛主循环启动... (配置: {ablation_flags})")
             await self._flush_logs_to_db() # FLUSH 1
             
             # Initial setup
@@ -503,7 +503,7 @@ class ForumScheduler:
                 await self._broadcast_system_log(forum_id, f"主持人[{moderator.name}] 已就位")
             else:
                 moderator = ModeratorAgent(theme=forum.topic)
-                await self._broadcast_system_log(forum_id, "绯荤粺榛樿涓绘寔浜哄凡灏变綅")
+                await self._broadcast_system_log(forum_id, "系统默认主持人已就位")
             
             # Speaker Queue for multi-speaker management
             speaker_queue = []
@@ -511,8 +511,8 @@ class ForumScheduler:
             batch_spoken_agents = set()
             
             # Opening
-            await self._broadcast_system_message(forum_id, "璁哄潧寮€濮嬶紝涓绘寔浜烘鍦ㄥ紑鍦?..")
-            await self._broadcast_system_log(forum_id, "涓绘寔浜烘鍦ㄨ繘琛屽紑鍦虹櫧...")
+            await self._broadcast_system_message(forum_id, "论坛开始，主持人正在开场...")
+            await self._broadcast_system_log(forum_id, "主持人正在进行开场白...")
             await self._flush_logs_to_db() # FLUSH 2
             
             await self._moderator_speak(forum_id, moderator, "opening", guests=participants, ablation_flags=ablation_flags)
@@ -630,9 +630,9 @@ class ForumScheduler:
                 if ablation_flags.get("no_shared_memory"):
                     if messages:
                         last_m = messages[-1]
-                        context_str = f"銆愭渶鏂板彂瑷€銆慭n{last_m.speaker_name}: {last_m.content}"
+                        context_str = f"【最新发言】\n{last_m.speaker_name}: {last_m.content}"
                     else:
-                        context_str = "(鏆傛棤鍙戣█)"
+                        context_str = "(暂无发言)"
                 else:
                     context_str = shared_memory.get_context_str()
 
@@ -667,12 +667,12 @@ class ForumScheduler:
                 # No, because context depends on the previous speaker's FULL message.
                 
                 # Broadcast thinking log - Use create_task to not block thinking
-                asyncio.create_task(self._broadcast_system_log(forum_id, "鎵€鏈夊弬涓庤€呮鍦ㄦ€濊€冧腑...", "info"))
+                asyncio.create_task(self._broadcast_system_log(forum_id, "所有参与者正在思考中...", "info"))
                 logger.info(f"Forum {forum_id}: Agents start thinking...")
                 
                 async def agent_think(ag):
                     try:
-                        await self._broadcast_system_log(forum_id, f"鍢夊 [{ag.name}] 姝ｅ湪鎬濊€?..", "thought")
+                        await self._broadcast_system_log(forum_id, f"嘉宾 [{ag.name}] 正在思考...", "thought")
                         
                         if ablation_flags.get("mock_llm"):
                             await asyncio.sleep(1)
@@ -695,7 +695,7 @@ class ForumScheduler:
                         return ag, thought
                     except Exception as e:
                         logger.error(f"Agent {ag.name} think failed: {e}")
-                        await self._broadcast_system_log(forum_id, f"鍢夊 [{ag.name}] 鎬濊€冨け璐? {str(e)}", "error")
+                        await self._broadcast_system_log(forum_id, f"嘉宾 [{ag.name}] 思考失败: {str(e)}", "error")
                         return ag, None
 
                 # Execute thinking in parallel - NO DB LOCK HELD HERE
@@ -916,11 +916,11 @@ class ForumScheduler:
                 queue_names = [a.name for a in speaker_queue]
                 if queue_names:
                     # Optimized: Use background task for log persistence to avoid blocking
-                    asyncio.create_task(self._broadcast_system_log(forum_id, f"褰撳墠鍙戣█闃熷垪: {', '.join(queue_names)}", "info"))
+                    asyncio.create_task(self._broadcast_system_log(forum_id, f"当前发言队列: {', '.join(queue_names)}", "info"))
                 
                 if speaker:
                     # Async log to not block speaking
-                    asyncio.create_task(self._broadcast_system_log(forum_id, f"涓嬩竴浣嶅彂瑷€: [{speaker.name}]", "info"))
+                    asyncio.create_task(self._broadcast_system_log(forum_id, f"下一位发言: [{speaker.name}]", "info"))
                     
                     thought = thoughts_map.get(speaker) or {}
                     
@@ -951,7 +951,7 @@ class ForumScheduler:
             logger.error(f"Forum loop crashed: {e}")
             logger.error(traceback.format_exc())
             try:
-                await self._broadcast_system_log(forum_id, f"璁哄潧寮傚父缁堟: {str(e)}", "error")
+                await self._broadcast_system_log(forum_id, f"论坛异常终止: {str(e)}", "error")
             except:
                 pass
 
@@ -966,7 +966,7 @@ class ForumScheduler:
             forum = get_forum(db, forum_id)
             moderator_id = forum.moderator_id
         
-        # await self._broadcast_system_log(forum_id, f"涓绘寔浜?[{moderator.name}] 姝ｅ湪鏋勬€?..", "info")
+        # await self._broadcast_system_log(forum_id, f"主持人 [{moderator.name}] 正在构思...", "info")
         try:
             if ablation_flags.get("mock_llm"):
                 await asyncio.sleep(1)
@@ -996,18 +996,18 @@ class ForumScheduler:
             if gen:
                 try:
                     # Async log
-                    asyncio.create_task(self._broadcast_system_log(forum_id, f"涓绘寔浜?[{moderator.name}] 姝ｅ湪鏋勬€?..", "thought"))
+                    asyncio.create_task(self._broadcast_system_log(forum_id, f"主持人 [{moderator.name}] 正在构思...", "thought"))
                     
                     first_token = True
                     async for chunk in async_generator_wrapper(gen):
                         # --- NEW: Interruption Check ---
                         if await self._process_user_messages(forum_id):
                             logger.info(f"Moderator {moderator.name} interrupted by user.")
-                            await self._broadcast_system_log(forum_id, f"涓绘寔浜鸿瑙備紬鎵撴柇", "warning")
+                            await self._broadcast_system_log(forum_id, "主持人被观众打断", "warning")
                             break
                             
                         if first_token:
-                            await self._broadcast_system_log(forum_id, f"涓绘寔浜?[{moderator.name}] 寮€濮嬪彂瑷€...", "speech")
+                            await self._broadcast_system_log(forum_id, f"主持人 [{moderator.name}] 开始发言...", "speech")
                             first_token = False
 
                         if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
@@ -1021,7 +1021,7 @@ class ForumScheduler:
                 
         except Exception as e:
             logger.error(f"Moderator speak failed: {e}")
-            await self._broadcast_system_log(forum_id, f"涓绘寔浜哄彂瑷€鐢熸垚澶辫触: {str(e)}", "error")
+            await self._broadcast_system_log(forum_id, f"主持人发言生成失败: {str(e)}", "error")
             return
 
         if content:
@@ -1072,7 +1072,7 @@ class ForumScheduler:
             
             if gen:
                 try:
-                    # await self._broadcast_system_log(forum_id, f"鍢夊 [{agent.name}] 姝ｅ湪鏋勬€?..", "thought")
+                    # await self._broadcast_system_log(forum_id, f"嘉宾 [{agent.name}] 正在构思...", "thought")
                     
                     first_token = True
                     start_speak_time = time.time()
@@ -1089,7 +1089,7 @@ class ForumScheduler:
                         if first_token:
                             ttft = time.time() - start_speak_time
                             logger.info(f"Agent {agent.name} TTFT: {ttft:.2f}s")
-                            await self._broadcast_system_log(forum_id, f"鍢夊 [{agent.name}] 寮€濮嬪彂瑷€...", "speech")
+                            await self._broadcast_system_log(forum_id, f"嘉宾 [{agent.name}] 开始发言...", "speech")
                             first_token = False
                             
                         if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
@@ -1104,14 +1104,14 @@ class ForumScheduler:
                             await self._broadcast_chunk(forum_id, agent.name, token, persona_id, None, stream_id, thought=send_thought)
                 except Exception as e:
                     logger.error(f"Error consuming agent generator: {e}")
-                    await self._broadcast_system_log(forum_id, f"鍢夊 [{agent.name}] 鍙戣█涓柇: {str(e)}", "error")
+                    await self._broadcast_system_log(forum_id, f"嘉宾 [{agent.name}] 发言中断: {str(e)}", "error")
             else:
                 logger.warning(f"Agent {agent.name} speak returned None")
-                content = "(娌夐粯)"
+                content = "(沉默)"
                 await self._broadcast_system_log(forum_id, f"嘉宾 [{agent.name}] 放弃发言 (API无响应或返回空)", "warning")
         except Exception as e:
             logger.error(f"Agent {agent.name} speak failed: {e}")
-            await self._broadcast_system_log(forum_id, f"鍢夊 [{agent.name}] 鍙戣█鐢熸垚澶辫触: {str(e)}", "error")
+            await self._broadcast_system_log(forum_id, f"嘉宾 [{agent.name}] 发言生成失败: {str(e)}", "error")
             return
 
         if content:

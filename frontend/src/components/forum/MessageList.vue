@@ -15,6 +15,7 @@
         :is-streaming="(msg as any).isStreaming"
         :moderator-id="msg.moderator_id"
         :thought="msg.thought"
+        :avatar="getMessageAvatar(msg)"
       />
     </div>
     <div ref="bottomRef"></div>
@@ -52,13 +53,18 @@ const isSelf = (msg: Message) => {
   return false
 }
 
+const getMessageAvatar = (msg: Message) => {
+  if (!msg.persona_id) return ''
+  return personaStore.personas.find(persona => persona.id === msg.persona_id)?.avatar || ''
+}
+
 defineExpose({ scrollToBottom })
 </script>
 
 <style scoped>
 .chat-area {
   flex: 1;
-  background: #f9f9f9;
+  background: #f2f7f3;
   padding: 24px;
   overflow-y: auto;
   position: relative; /* Create stacking context for loading overlay */

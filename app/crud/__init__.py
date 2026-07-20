@@ -1,4 +1,16 @@
-from app.schemas import UserCreate, PersonaCreate, PersonaUpdate, ForumCreate, MessageCreate
+from app.schemas import (
+    UserCreate,
+    PersonaCreate,
+    PersonaUpdate,
+    ForumCreate,
+    MessageCreate,
+    SkillCreate,
+    SkillUpdate,
+    AttachmentCreate,
+    ArtifactCreate,
+    TaskRunCreate,
+    TaskRunUpdate,
+)
 from app.core.hashing import Hasher
 from app.db.client import fetch_one, fetch_all, RowObject, db_transaction, db_execute_commit
 from app.core.cache import cache_service
@@ -26,9 +38,22 @@ def _maybe_parse_json(value):
         return value
 
 
+def _json_or_value(value):
+    if isinstance(value, (dict, list)):
+        return json.dumps(value)
+    return value
+
+
 def _normalize_persona(persona):
     if persona is not None and hasattr(persona, "theories"):
         persona.theories = _maybe_parse_json(persona.theories)
+    if persona is not None and hasattr(persona, "skills"):
+        persona.skills = _maybe_parse_json(persona.skills) or ["chat.reply"]
+    if persona is not None and hasattr(persona, "skill_policy"):
+        parsed_policy = _maybe_parse_json(persona.skill_policy)
+        persona.skill_policy = parsed_policy if isinstance(parsed_policy, dict) else {}
+    if persona is not None and hasattr(persona, "modalities"):
+        persona.modalities = _maybe_parse_json(persona.modalities) or ["text"]
     return persona
 
 
@@ -81,12 +106,18 @@ def create_user(db: Any, user: UserCreate):
 def create_persona(db, persona: PersonaCreate, owner_id: int):
     try:
         theories_json = json.dumps(persona.theories)
+        skills = persona.skills or ["chat.reply"]
+        modalities = persona.modalities or ["text"]
+        skill_policy = persona.skill_policy or {}
         created_at = datetime.now()
         rs = db_execute_commit(
             db,
             """
-            INSERT INTO personas (owner_id, name, title, bio, theories, stance, system_prompt, is_public, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO personas (
+                owner_id, name, title, bio, theories, stance, system_prompt, is_public,
+                avatar, skills, skill_policy, modalities, capabilities_version, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *
             """,
             [
@@ -98,11 +129,18 @@ def create_persona(db, persona: PersonaCreate, owner_id: int):
                 persona.stance,
                 persona.system_prompt,
                 persona.is_public,
+                persona.avatar,
+                json.dumps(skills),
+                json.dumps(skill_policy),
+                json.dumps(modalities),
+                persona.capabilities_version or 1,
                 created_at
             ]
         )
         new_persona = fetch_one(rs)
         new_persona = _normalize_persona(new_persona)
+        if new_persona:
+            _sync_persona_skill_bindings(db, new_persona.id, new_persona.skills, new_persona.skill_policy)
             
         # Cache Aside: Don't set cache on create. Let the first read populate it.
         # This ensures strict adherence to "DB is source of truth" and lazy loading.
@@ -134,7 +172,7 @@ def update_persona(db, persona_id: int, updates: PersonaUpdate):
         values = []
         for key, value in update_data.items():
             set_clauses.append(f"{key} = ?")
-            if key == "theories":
+            if key in {"theories", "skills", "modalities", "skill_policy"}:
                 values.append(json.dumps(value))
             else:
                 values.append(value)
@@ -144,6 +182,8 @@ def update_persona(db, persona_id: int, updates: PersonaUpdate):
         
         rs = db_execute_commit(db, query, values)
         updated = _normalize_persona(fetch_one(rs))
+        if updated and ("skills" in update_data or "skill_policy" in update_data):
+            _sync_persona_skill_bindings(db, persona_id, updated.skills, updated.skill_policy)
         
         # Sync Strategy: Delete Redis Key on Update
         if updated:
@@ -153,6 +193,40 @@ def update_persona(db, persona_id: int, updates: PersonaUpdate):
     except Exception as e:
         logger.error(f"Error updating persona: {e}")
         raise
+
+
+def _skill_key_to_id(db, skill_key: str) -> Optional[int]:
+    rs = db.execute("SELECT id FROM skills WHERE skill_key = ?", [skill_key])
+    row = fetch_one(rs)
+    return row.id if row else None
+
+
+def _sync_persona_skill_bindings(db, persona_id: int, skills: Optional[list[str]], policy: Optional[dict] = None):
+    try:
+        resolved_skills = [s for s in (skills or ["chat.reply"]) if str(s).strip()]
+        policy = policy or {}
+
+        with db_transaction(db) as tx:
+            tx.execute("DELETE FROM persona_skill_bindings WHERE persona_id = ?", [persona_id])
+            for index, skill_key in enumerate(resolved_skills):
+                skill_id = _skill_key_to_id(tx, skill_key)
+                if not skill_id:
+                    continue
+                tx.execute(
+                    """
+                    INSERT INTO persona_skill_bindings (persona_id, skill_id, enabled, priority, policy)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT (persona_id, skill_id) DO UPDATE SET
+                        enabled = excluded.enabled,
+                        priority = excluded.priority,
+                        policy = excluded.policy
+                    """,
+                    [persona_id, skill_id, True, index, json.dumps(policy.get(skill_key, {}))],
+                )
+        return True
+    except Exception as e:
+        logger.error(f"Error syncing persona skill bindings: {e}")
+        return False
 
 def delete_persona(db, persona_id: int):
     try:
@@ -182,6 +256,237 @@ def delete_persona(db, persona_id: int):
     except Exception as e:
         logger.error(f"Error deleting persona {persona_id}: {e}")
         raise
+
+
+def list_skills(db):
+    rs = db.execute("SELECT * FROM skills ORDER BY category, skill_key ASC", [])
+    return fetch_all(rs)
+
+
+def save_chat_attachments(db, chat_message_id: int, attachment_ids: list[int]):
+    saved = []
+    for attachment_id in attachment_ids or []:
+        linked = link_attachment_to_message(db, attachment_id, chat_message_id)
+        if linked:
+            saved.append(linked)
+    return saved
+
+
+def get_skill_by_key(db, skill_key: str):
+    rs = db.execute("SELECT * FROM skills WHERE skill_key = ?", [skill_key])
+    return fetch_one(rs)
+
+
+def create_skill(db, skill: SkillCreate):
+    try:
+        created_at = datetime.now()
+        rs = db_execute_commit(
+            db,
+            """
+            INSERT INTO skills (
+                skill_key, name, category, description, input_modalities, output_types,
+                required_models, required_tools, params_schema, permission_scope,
+                cost_level, status, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(skill_key) DO UPDATE SET
+                name = excluded.name,
+                category = excluded.category,
+                description = excluded.description,
+                input_modalities = excluded.input_modalities,
+                output_types = excluded.output_types,
+                required_models = excluded.required_models,
+                required_tools = excluded.required_tools,
+                params_schema = excluded.params_schema,
+                permission_scope = excluded.permission_scope,
+                cost_level = excluded.cost_level,
+                status = excluded.status,
+                updated_at = excluded.updated_at
+            RETURNING *
+            """,
+            [
+                skill.skill_key,
+                skill.name,
+                skill.category,
+                skill.description,
+                json.dumps(skill.input_modalities),
+                json.dumps(skill.output_types),
+                json.dumps(skill.required_models),
+                json.dumps(skill.required_tools),
+                json.dumps(skill.params_schema),
+                json.dumps(skill.permission_scope),
+                skill.cost_level,
+                skill.status,
+                created_at,
+                created_at,
+            ],
+        )
+        return fetch_one(rs)
+    except Exception as e:
+        logger.error(f"Error creating skill: {e}")
+        raise
+
+
+def create_attachment(db, attachment: AttachmentCreate):
+    try:
+        created_at = datetime.now()
+        rs = db_execute_commit(
+            db,
+            """
+            INSERT INTO attachments (
+                owner_id, persona_id, chat_message_id, session_id, file_name,
+                mime_type, size, kind, storage_url, preview_url, sha256, meta, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING *
+            """,
+            [
+                attachment.owner_id,
+                attachment.persona_id,
+                attachment.chat_message_id,
+                attachment.session_id,
+                attachment.file_name,
+                attachment.mime_type,
+                attachment.size,
+                attachment.kind,
+                attachment.storage_url,
+                attachment.preview_url,
+                attachment.sha256,
+                json.dumps(attachment.meta or {}),
+                created_at,
+            ],
+        )
+        return fetch_one(rs)
+    except Exception as e:
+        logger.error(f"Error creating attachment: {e}")
+        raise
+
+
+def link_attachment_to_message(db, attachment_id: int, chat_message_id: int):
+    try:
+        rs = db_execute_commit(
+            db,
+            "UPDATE attachments SET chat_message_id = ? WHERE id = ? RETURNING *",
+            [chat_message_id, attachment_id],
+        )
+        return fetch_one(rs)
+    except Exception as e:
+        logger.error(f"Error linking attachment {attachment_id} to message {chat_message_id}: {e}")
+        raise
+
+
+def list_attachments_for_message(db, chat_message_id: int):
+    rs = db.execute("SELECT * FROM attachments WHERE chat_message_id = ? ORDER BY created_at ASC", [chat_message_id])
+    return fetch_all(rs)
+
+
+def get_attachment(db, attachment_id: int):
+    rs = db.execute("SELECT * FROM attachments WHERE id = ?", [attachment_id])
+    return fetch_one(rs)
+
+
+def create_artifact(db, artifact: ArtifactCreate):
+    try:
+        created_at = datetime.now()
+        rs = db_execute_commit(
+            db,
+            """
+            INSERT INTO artifacts (
+                owner_id, persona_id, task_run_id, artifact_type, file_name,
+                mime_type, storage_url, preview_url, version, status, meta, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING *
+            """,
+            [
+                artifact.owner_id,
+                artifact.persona_id,
+                artifact.task_run_id,
+                artifact.artifact_type,
+                artifact.file_name,
+                artifact.mime_type,
+                artifact.storage_url,
+                artifact.preview_url,
+                artifact.version,
+                artifact.status,
+                json.dumps(artifact.meta or {}),
+                created_at,
+            ],
+        )
+        return fetch_one(rs)
+    except Exception as e:
+        logger.error(f"Error creating artifact: {e}")
+        raise
+
+
+def get_artifact(db, artifact_id: int):
+    rs = db.execute("SELECT * FROM artifacts WHERE id = ?", [artifact_id])
+    return fetch_one(rs)
+
+
+def create_task_run(db, task_run: TaskRunCreate):
+    try:
+        started_at = datetime.now()
+        rs = db_execute_commit(
+            db,
+            """
+            INSERT INTO task_runs (
+                owner_id, persona_id, skill_key, session_id, status, progress,
+                input_payload, output_payload, error_message, started_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING *
+            """,
+            [
+                task_run.owner_id,
+                task_run.persona_id,
+                task_run.skill_key,
+                task_run.session_id,
+                task_run.status,
+                task_run.progress,
+                json.dumps(task_run.input_payload or {}),
+                json.dumps(task_run.output_payload or {}),
+                task_run.error_message,
+                started_at,
+            ],
+        )
+        return fetch_one(rs)
+    except Exception as e:
+        logger.error(f"Error creating task run: {e}")
+        raise
+
+
+def update_task_run(db, task_run_id: int, updates: TaskRunUpdate):
+    try:
+        update_data = updates.model_dump(exclude_unset=True)
+        if not update_data:
+            return get_task_run(db, task_run_id)
+
+        set_clauses = []
+        values = []
+        for key, value in update_data.items():
+            set_clauses.append(f"{key} = ?")
+            if key in {"input_payload", "output_payload"}:
+                values.append(json.dumps(value))
+            else:
+                values.append(value)
+
+        if "status" in update_data and update_data["status"] in {"done", "failed", "cancelled"}:
+            set_clauses.append("finished_at = ?")
+            values.append(datetime.now())
+
+        values.append(task_run_id)
+        query = f"UPDATE task_runs SET {', '.join(set_clauses)} WHERE id = ? RETURNING *"
+        rs = db_execute_commit(db, query, values)
+        return fetch_one(rs)
+    except Exception as e:
+        logger.error(f"Error updating task run {task_run_id}: {e}")
+        raise
+
+
+def get_task_run(db, task_run_id: int):
+    rs = db.execute("SELECT * FROM task_runs WHERE id = ?", [task_run_id])
+    return fetch_one(rs)
 
 # --- Forum ---
 def create_forum(db, forum: ForumCreate, creator_id: int):
@@ -379,18 +684,26 @@ def get_forum_messages(db, forum_id: int):
     return fetch_all(rs)
 
 # --- Chat Messages (时空之门单聊历史) ---
-def save_chat_message(db, user_id: int, persona_id: int, role: str, content: str):
+def save_chat_message(
+    db,
+    user_id: int,
+    persona_id: int,
+    role: str,
+    content: str,
+    message_type: str = "text",
+    metadata: Optional[dict] = None,
+):
     """保存单聊消息"""
     try:
         created_at = datetime.now()
         rs = db_execute_commit(
             db,
             """
-            INSERT INTO chat_messages (user_id, persona_id, role, content, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO chat_messages (user_id, persona_id, role, message_type, content, metadata, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             RETURNING *
             """,
-            [user_id, persona_id, role, content, created_at]
+            [user_id, persona_id, role, message_type, content, json.dumps(metadata or {}), created_at]
         )
         return fetch_one(rs)
     except Exception as e:
@@ -403,7 +716,10 @@ def get_chat_history(db, user_id: int, persona_id: int):
         "SELECT * FROM chat_messages WHERE user_id = ? AND persona_id = ? ORDER BY created_at ASC",
         [user_id, persona_id]
     )
-    return fetch_all(rs)
+    history = fetch_all(rs)
+    for message in history:
+        setattr(message, "attachments", list_attachments_for_message(db, message.id))
+    return history
 
 def clear_chat_history(db, user_id: int, persona_id: int):
     """清空用户与指定智能体的聊天历史"""

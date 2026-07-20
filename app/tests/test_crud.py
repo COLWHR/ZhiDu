@@ -16,11 +16,18 @@ def test_crud_persona_lifecycle(db: Session):
     
     # Create
     p_in = schemas.PersonaCreate(
-        name="P1", bio="Bio", theories=["T1"], stance="S1", system_prompt="SP", is_public=True
+        name="P1",
+        bio="Bio",
+        theories=["T1"],
+        stance="S1",
+        system_prompt="SP",
+        is_public=True,
+        avatar="/uploads/avatars/p1.png",
     )
     persona = crud.create_persona(db, p_in, owner_id=u.id)
     assert persona.name == "P1"
     assert persona.theories == ["T1"]
+    assert persona.avatar == "/uploads/avatars/p1.png"
     
     # Read
     fetched = crud.get_persona(db, persona.id)

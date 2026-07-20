@@ -154,7 +154,7 @@ const onFinish = async (values: any) => {
 .blob-1 {
   width: 400px;
   height: 400px;
-  background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%);
+  background: #3bb36b;
   top: -100px;
   left: -100px;
   animation: float 8s ease-in-out infinite;
@@ -163,7 +163,7 @@ const onFinish = async (values: any) => {
 .blob-2 {
   width: 300px;
   height: 300px;
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  background: #3bb36b;
   bottom: -50px;
   right: -50px;
   animation: float 10s ease-in-out infinite reverse;
@@ -172,7 +172,7 @@ const onFinish = async (values: any) => {
 .blob-3 {
   width: 250px;
   height: 250px;
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  background: #2fa15c;
   top: 50%;
   right: 10%;
   animation: float 12s ease-in-out infinite;
@@ -193,13 +193,13 @@ const onFinish = async (values: any) => {
 .logo {
   width: 80px;
   height: 80px;
-  background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%);
+  background: #1a1d1e;
   border-radius: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 20px;
-  box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 10px 40px rgba(26, 29, 30, 0.3);
 }
 
 .logo-icon {
@@ -212,7 +212,7 @@ const onFinish = async (values: any) => {
 .brand-title {
   font-size: 32px;
   font-weight: 700;
-  color: #6654F1;
+  color: #3bb36b;
   margin: 0 0 8px;
 }
 
@@ -235,14 +235,14 @@ const onFinish = async (values: any) => {
 
 .auth-title {
   font-size: 24px;
-  color: #1a1a2e;
+  color: #1a1d1e;
   font-weight: 700;
   margin-bottom: 8px;
 }
 
 .auth-subtitle {
   font-size: 14px;
-  color: #888;
+  color: #787f84;
 }
 
 .auth-form {
@@ -260,7 +260,7 @@ const onFinish = async (values: any) => {
 }
 
 .input-icon {
-  color: #667eea;
+  color: #3bb36b;
   font-size: 18px;
 }
 
@@ -270,15 +270,15 @@ const onFinish = async (values: any) => {
   font-weight: 600;
   margin-top: 8px;
   border-radius: 12px;
-  background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%);
+  background: #3bb36b;
   border: none;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 15px rgba(59, 179, 107, 0.4);
   transition: all 0.3s ease;
 }
 
 .submit-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  box-shadow: 0 6px 20px rgba(59, 179, 107, 0.5);
 }
 
 .submit-btn:active {
@@ -293,7 +293,7 @@ const onFinish = async (values: any) => {
 }
 
 .link-btn {
-  color: #667eea;
+  color: #3bb36b;
   font-weight: 600;
   margin-left: 6px;
   text-decoration: none;
@@ -301,7 +301,7 @@ const onFinish = async (values: any) => {
 }
 
 .link-btn:hover {
-  color: #764ba2;
+  color: #2fa15c;
   text-decoration: none;
 }
 

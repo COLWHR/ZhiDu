@@ -3,7 +3,12 @@
     <div v-for="item in participants" :key="item.persona.id" class="participant-card">
       <div class="card-header">
         <a-avatar :style="{ backgroundColor: getAvatarColor(item.persona.name) }" size="large">
-          {{ item.persona.name[0] }}
+          <img
+            v-if="getPersonaAvatarSrc(item.persona.avatar)"
+            :src="getPersonaAvatarSrc(item.persona.avatar)"
+            :alt="item.persona.name"
+          />
+          <template v-else>{{ getAvatarInitial(item.persona.name, '智') }}</template>
         </a-avatar>
         <div class="header-info">
           <div class="name-row">
@@ -29,12 +34,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useForumStore } from '@/stores/forum'
+import { getAvatarInitial, isImageAvatar } from '@/utils/avatar'
 
 const store = useForumStore()
 const participants = computed(() => store.currentForum?.participants ?? [])
 
 const getAvatarColor = (name: string) => {
-  const colors = ['#f56a00', '#7265e6', '#ffbf00', '#00a2ae', '#1890ff', '#52c41a', '#eb2f96']
+  const colors = ['#f56a00', '#7265e6', '#ffbf00', '#00a2ae', '#3bb36b', '#52c41a', '#eb2f96']
   let hash = 0
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash)
@@ -48,6 +54,9 @@ const getStanceColor = (stance: string) => {
   if (stance.includes('反对') || stance.includes('反方')) return 'error'
   return 'default'
 }
+const getPersonaAvatarSrc = (avatar?: string) => {
+  return isImageAvatar(avatar) ? avatar : ''
+}
 </script>
 
 <style scoped>
@@ -59,10 +68,10 @@ const getStanceColor = (stance: string) => {
 }
 
 .participant-card {
-  background: #fafafa;
+  background: #f2f7f3;
   border-radius: 8px;
   padding: 16px;
-  border: 1px solid #f0f0f0;
+  border: 1px solid #e8f0ea;
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
@@ -70,7 +79,7 @@ const getStanceColor = (stance: string) => {
 }
 
 .participant-card:hover {
-  border-color: #1890ff;
+  border-color: #3bb36b;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
@@ -78,6 +87,13 @@ const getStanceColor = (stance: string) => {
   display: flex;
   align-items: flex-start;
   gap: 12px;
+}
+
+.card-header :deep(.ant-avatar img),
+.card-header .avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .header-info {
@@ -99,7 +115,7 @@ const getStanceColor = (stance: string) => {
 .participant-name {
   font-weight: 600;
   font-size: 15px;
-  color: #262626;
+  color: #1a1d1e;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -123,7 +139,7 @@ const getStanceColor = (stance: string) => {
 .bio-text {
   margin: 0;
   font-size: 13px;
-  color: #595959;
+  color: #6b7280;
   display: -webkit-box;
   -webkit-line-clamp: 6; /* Show more lines now that tags are compact */
   -webkit-box-orient: vertical;

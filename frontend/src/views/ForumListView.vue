@@ -135,9 +135,12 @@
               style="width: 100%"
               class="form-select"
             >
-              <template #option="{ label }">
+              <template #option="{ label, avatar }">
                  <div class="select-option">
-                   <span class="option-avatar">{{ label[0] }}</span>
+                   <span class="option-avatar">
+                     <img v-if="getPersonaAvatarSrc(avatar)" :src="getPersonaAvatarSrc(avatar)" :alt="label" />
+                     <template v-else>{{ getAvatarInitial(label, '智') }}</template>
+                   </span>
                    <span>{{ label }}</span>
                  </div>
               </template>
@@ -180,6 +183,7 @@ import { useAuthStore } from '@/stores/auth'
 import { message } from 'ant-design-vue'
 import request from '@/utils/request'
 import { PlusOutlined, ArrowRightOutlined, DeleteOutlined, ClockCircleOutlined, UserOutlined } from '@ant-design/icons-vue'
+import { getAvatarInitial, isImageAvatar } from '@/utils/avatar'
 
 const forumStore = useForumStore()
 const personaStore = usePersonaStore()
@@ -211,9 +215,14 @@ const moderatorOptions = computed(() => {
 const personaOptions = computed(() => {
   return personaStore.personas.map(p => ({
     label: p.name,
-    value: p.id
+    value: p.id,
+    avatar: p.avatar
   }))
 })
+
+const getPersonaAvatarSrc = (avatar?: string) => {
+  return isImageAvatar(avatar) ? avatar : ''
+}
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -239,12 +248,12 @@ const getStatusText = (status: string) => {
 
 const getAvatarGradient = (text: string) => {
   const colors = [
-    'linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%)',
-    'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-    'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-    'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-    'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-    'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)'
+    '#3bb36b',
+    '#f59e0b',
+    '#3b82f6',
+    '#2fa15c',
+    '#3bb36b',
+    '#6b7280'
   ]
   let hash = 0
   for (let i = 0; i < text.length; i++) {
@@ -344,9 +353,9 @@ const handleDelete = async (id: number) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%);
+  background: #3bb36b;
   border-radius: 16px;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 15px rgba(59, 179, 107, 0.3);
 }
 
 .header-title {
@@ -357,13 +366,13 @@ const handleDelete = async (id: number) => {
 .title {
   font-size: 28px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #1a1d1e;
   line-height: 1.2;
 }
 
 .subtitle {
   font-size: 14px;
-  color: #888;
+  color: #787f84;
   margin-top: 4px;
 }
 
@@ -373,9 +382,9 @@ const handleDelete = async (id: number) => {
   border-radius: 12px;
   font-weight: 600;
   font-size: 15px;
-  background: linear-gradient(-225deg, #69EACB 0%, #EACCF8 48%, #6654F1 100%);
+  background: #3bb36b;
   border: none;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 15px rgba(59, 179, 107, 0.3);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -384,7 +393,7 @@ const handleDelete = async (id: number) => {
 
 .create-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 6px 20px rgba(59, 179, 107, 0.4);
 }
 
 .btn-icon {
@@ -410,7 +419,7 @@ const handleDelete = async (id: number) => {
 
 .forum-card:hover {
   transform: translateY(-6px);
-  box-shadow: 0 12px 40px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 12px 40px rgba(59, 179, 107, 0.2);
 }
 
 .card-avatar {
@@ -433,7 +442,7 @@ const handleDelete = async (id: number) => {
   text-overflow: ellipsis;
   font-weight: 600;
   font-size: 16px;
-  color: #1a1a2e;
+  color: #1a1d1e;
 }
 
 .status-tag {
@@ -451,7 +460,7 @@ const handleDelete = async (id: number) => {
 
 .desc-item {
   font-size: 13px;
-  color: #888;
+  color: #787f84;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -460,7 +469,7 @@ const handleDelete = async (id: number) => {
 .card-footer {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid #e8f0ea;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -478,7 +487,7 @@ const handleDelete = async (id: number) => {
 }
 
 .action-text {
-  color: #667eea;
+  color: #3bb36b;
   font-weight: 500;
   font-size: 14px;
   display: flex;
@@ -488,7 +497,7 @@ const handleDelete = async (id: number) => {
 }
 
 .action-text:hover {
-  color: #764ba2;
+  color: #2fa15c;
 }
 
 .arrow-icon {
@@ -519,13 +528,13 @@ const handleDelete = async (id: number) => {
 .empty-text {
   font-size: 18px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: #1a1d1e;
   margin: 0 0 8px;
 }
 
 .empty-subtext {
   font-size: 14px;
-  color: #888;
+  color: #787f84;
   margin: 0 0 24px;
 }
 
@@ -534,9 +543,9 @@ const handleDelete = async (id: number) => {
   padding: 0 28px;
   border-radius: 12px;
   font-weight: 600;
-  background: linear-gradient(135deg, #a6e3e9 0%, #71c9ce 100%);
+  background: #3bb36b;
   border: none;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 15px rgba(59, 179, 107, 0.3);
 }
 
 .create-modal :deep(.ant-modal-content) {
@@ -552,7 +561,7 @@ const handleDelete = async (id: number) => {
 .create-modal :deep(.ant-modal-title) {
   font-size: 20px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #1a1d1e;
 }
 
 .modal-content {
@@ -577,9 +586,9 @@ const handleDelete = async (id: number) => {
 
 .form-hint {
   margin-top: 10px;
-  color: #667eea;
+  color: #3bb36b;
   font-size: 13px;
-  background: #f5f3ff;
+  background: #ebf7ee;
   padding: 10px 14px;
   border-radius: 8px;
   line-height: 1.5;
@@ -600,13 +609,21 @@ const handleDelete = async (id: number) => {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #a6e3e9 0%, #71c9ce 100%);
+  background: #3bb36b;
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
   font-weight: 600;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.option-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .modal-actions {
@@ -621,9 +638,9 @@ const handleDelete = async (id: number) => {
   border-radius: 10px;
   padding: 0 24px;
   font-weight: 500;
-  background: #f0f2f5;
+  background: #eef5f0;
   border: none;
-  color: #1a1a2e;
+  color: #1a1d1e;
 }
 
 .confirm-btn {
@@ -631,9 +648,9 @@ const handleDelete = async (id: number) => {
   border-radius: 10px;
   padding: 0 28px;
   font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #3bb36b;
   border: none;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 12px rgba(59, 179, 107, 0.3);
 }
 
 @media (max-width: 768px) {
