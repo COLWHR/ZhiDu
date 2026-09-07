@@ -69,3 +69,24 @@ def test_create_forum_default_moderator(client, auth_header):
     assert forum_res.status_code == 200
     data = forum_res.json()
     assert data["moderator_id"] is None
+
+
+def test_start_forum_without_participants_is_rejected(client, auth_header):
+    forum_res = client.post(
+        "/api/v1/forums/",
+        json={
+            "topic": "Empty Topic",
+            "participant_ids": [],
+            "duration_minutes": 5,
+        },
+        headers=auth_header,
+    )
+    assert forum_res.status_code == 200
+
+    start_res = client.post(
+        f"/api/v1/forums/{forum_res.json()['id']}/start",
+        headers=auth_header,
+    )
+
+    assert start_res.status_code == 400
+    assert "participant" in start_res.json()["detail"].lower()

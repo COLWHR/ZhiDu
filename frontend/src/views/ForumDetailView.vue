@@ -183,8 +183,10 @@ const handleFileUpload = async (file: File) => {
             }
         })
         
-        // Get the file URL from response
-        const fileUrl = response.data.url
+        const fileUrl = response.data.preview_url || response.data.storage_url || response.data.url
+        if (!fileUrl) {
+            throw new Error('Upload response did not include a usable file URL')
+        }
         
         // Send message with file URL
         await request.post(`/forums/${forumId}/chat`, {

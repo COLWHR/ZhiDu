@@ -66,9 +66,19 @@ describe('BasicLayout navigation', () => {
 
     const profileButton = wrapper.find('[data-test="sidebar-profile"]')
     expect(profileButton.exists()).toBe(true)
-    expect(profileButton.find('img').exists()).toBe(true)
+    expect(profileButton.find('img').exists()).toBe(false)
     expect(profileButton.text()).toContain('13555822359')
     expect(profileButton.text()).toContain('ID 42')
     expect(wrapper.find('[data-test="nav-logout"]').exists()).toBe(false)
+  })
+
+  it('does not expose an avatar picker in the profile popover', async () => {
+    const wrapper = mountLayout()
+
+    await wrapper.find('[data-test="sidebar-profile"]').trigger('click')
+    await new Promise(resolve => setTimeout(resolve, 250))
+
+    expect(document.body.textContent).not.toContain('头像形象')
+    expect(document.body.querySelector('[data-test="profile-avatar-picker"]')).toBeNull()
   })
 })

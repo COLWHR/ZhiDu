@@ -127,8 +127,7 @@
               </div>
               <div v-if="msg.role === 'user'" class="message-avatar">
                 <a-avatar size="small" style="background: #3bb36b">
-                  <img v-if="userAvatarSrc" :src="userAvatarSrc" :alt="authStore.user?.username || '用户'" />
-                  <template v-else>{{ getAvatarInitial(authStore.user?.username, '我') }}</template>
+                  {{ getAvatarInitial(authStore.user?.username, '我') }}
                 </a-avatar>
               </div>
             </div>
@@ -212,7 +211,7 @@ import {
 import { message } from 'ant-design-vue'
 import request from '@/utils/request'
 import { marked } from 'marked'
-import { getAvatarInitial, isImageAvatar, resolveBuiltInUserAvatarSrc } from '@/utils/avatar'
+import { getAvatarInitial, isImageAvatar } from '@/utils/avatar'
 
 type ChatAttachment = {
   id: number
@@ -264,8 +263,6 @@ const currentConversationSummary = computed(() => {
   const userMessages = messages.value.filter(msg => !msg.isWelcome)
   return `${userMessages.length} 条消息`
 })
-const userAvatarSrc = computed(() => resolveBuiltInUserAvatarSrc(authStore.user))
-
 const getAgentAvatarSrc = (agent?: any) => {
   return isImageAvatar(agent?.avatar) ? agent.avatar : ''
 }

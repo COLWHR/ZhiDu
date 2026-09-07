@@ -166,7 +166,13 @@ class RealGodAgent:
         try:
             # Increase timeout to 60s for better stability
             # Enable raise_error to catch specific exceptions
-            response_stream = get_chat_completion(messages, stream=True, timeout=60, raise_error=True)
+            response_stream = get_chat_completion(
+                messages,
+                stream=True,
+                timeout=60,
+                raise_error=True,
+                route="nvwa_generate",
+            )
             
             if not response_stream:
                 yield {"type": "error", "content": "LLM未响应 (返回为空)"}

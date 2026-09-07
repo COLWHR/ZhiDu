@@ -5,19 +5,6 @@ type AvatarPalette = {
   soft: string
 }
 
-export type BuiltInUserAvatar = {
-  id: string
-  name: string
-  src: string
-}
-
-export type AvatarSeedUser = {
-  id?: string | number | null
-  username?: string | null
-}
-
-export const USER_AVATAR_STORAGE_KEY = 'zhido:user-avatar-id'
-
 const palettes: AvatarPalette[] = [
   { bg: '#153c2c', fg: '#f7fff9', accent: '#bee83f', soft: '#3bb36b' },
   { bg: '#17324d', fg: '#f6fbff', accent: '#79c7ff', soft: '#4d8fd7' },
@@ -82,46 +69,4 @@ export const generatePersonaAvatar = (name?: string, title?: string, seedExtra?:
       <text x="64" y="77" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="42" font-weight="800" fill="${palette.fg}">${initial}</text>
     </svg>
   `)
-}
-
-export const builtInUserAvatars: BuiltInUserAvatar[] = [
-  {
-    id: 'bamboo',
-    name: '青竹',
-    src: generatePersonaAvatar('竹', 'user', 'bamboo')
-  },
-  {
-    id: 'orbit',
-    name: '星轨',
-    src: generatePersonaAvatar('星', 'user', 'orbit')
-  },
-  {
-    id: 'ember',
-    name: '微光',
-    src: generatePersonaAvatar('光', 'user', 'ember')
-  },
-  {
-    id: 'harbor',
-    name: '港湾',
-    src: generatePersonaAvatar('渡', 'user', 'harbor')
-  }
-]
-
-export const pickBuiltInUserAvatar = (seed?: string | number) => {
-  const index = hashString(String(seed ?? 'user')) % builtInUserAvatars.length
-  return builtInUserAvatars[index]
-}
-
-export const resolveBuiltInUserAvatar = (user?: AvatarSeedUser | null, storedAvatarId?: string | null) => {
-  const selectedId = storedAvatarId ?? (
-    typeof localStorage === 'undefined' ? '' : localStorage.getItem(USER_AVATAR_STORAGE_KEY)
-  )
-  return (
-    builtInUserAvatars.find(avatar => avatar.id === selectedId) ||
-    pickBuiltInUserAvatar(user?.id || user?.username || 'user')
-  )
-}
-
-export const resolveBuiltInUserAvatarSrc = (user?: AvatarSeedUser | null, storedAvatarId?: string | null) => {
-  return resolveBuiltInUserAvatar(user, storedAvatarId).src
 }

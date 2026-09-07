@@ -3,6 +3,7 @@ describe('End-to-end smoke', () => {
   const password = '123456'
   const topic = `Smoke Forum ${Date.now()}`
   let forumId: number
+  let personaId: number
   let authToken: string
 
   it('logs in, creates a forum, opens the detail view, and sends a chat message', () => {
@@ -30,31 +31,55 @@ describe('End-to-end smoke', () => {
 
       return cy.request({
         method: 'POST',
-        url: 'http://127.0.0.1:8000/api/v1/forums/',
+        url: 'http://127.0.0.1:8000/api/v1/personas/',
         headers: {
           Authorization: `Bearer ${authToken}`
         },
         body: {
-          topic,
-          participant_ids: [],
-          duration_minutes: 5
+          name: `Smoke Persona ${Date.now()}`,
+          title: 'Smoke Persona',
+          bio: 'Persona for the forum smoke test',
+          theories: [],
+          stance: 'Neutral',
+          system_prompt: 'Be concise and deterministic.',
+          is_public: false
         }
-      }).then((createResponse) => {
-        forumId = createResponse.body.id
+      }).then((personaResponse) => {
+        personaId = personaResponse.body.id
 
         return cy.request({
           method: 'POST',
-          url: `http://127.0.0.1:8000/api/v1/forums/${forumId}/start`,
+          url: 'http://127.0.0.1:8000/api/v1/forums/',
           headers: {
             Authorization: `Bearer ${authToken}`
           },
-          body: {}
+          body: {
+            topic,
+            participant_ids: [personaId],
+            duration_minutes: 5
+          }
+        }).then((createResponse) => {
+          forumId = createResponse.body.id
+
+          return cy.request({
+            method: 'POST',
+            url: `http://127.0.0.1:8000/api/v1/forums/${forumId}/start`,
+            headers: {
+              Authorization: `Bearer ${authToken}`
+            },
+            body: {
+              ablation_flags: {
+                mock_llm: true,
+                no_summary: true
+              }
+            }
+          })
         })
       })
     })
 
     cy.then(() => {
-      cy.visit('/forums')
+      cy.visit('/dashboard')
       cy.contains(topic, { timeout: 20000 }).should('be.visible')
       cy.contains(topic).click()
 
@@ -69,8 +94,25 @@ describe('End-to-end smoke', () => {
       cy.wait('@sendChat').its('response.statusCode').should('eq', 202)
 
       cy.request({
+        method: 'POST',
+        url: `http://127.0.0.1:8000/api/v1/forums/${forumId}/stop`,
+        headers: {
+          Authorization: `Bearer ${authToken}`
+        },
+        failOnStatusCode: false
+      })
+
+      cy.request({
         method: 'DELETE',
         url: `http://127.0.0.1:8000/api/v1/forums/${forumId}`,
+        headers: {
+          Authorization: `Bearer ${authToken}`
+        }
+      })
+
+      cy.request({
+        method: 'DELETE',
+        url: `http://127.0.0.1:8000/api/v1/personas/${personaId}`,
         headers: {
           Authorization: `Bearer ${authToken}`
         }

@@ -1,6 +1,8 @@
 import {
   createForum,
+  createPersona,
   deleteForum,
+  deletePersona,
   getAuthToken,
   loginViaUi,
   registerUser,
@@ -11,6 +13,7 @@ import {
 describe('Upload, WebSocket, reconnect regression', () => {
   let token = ''
   let forumId = 0
+  let personaId = 0
 
   afterEach(() => {
     if (forumId) {
@@ -25,6 +28,12 @@ describe('Upload, WebSocket, reconnect regression', () => {
     }
 
     forumId = 0
+
+    if (personaId) {
+      deletePersona(token, personaId)
+    }
+
+    personaId = 0
   })
 
   it('keeps the detail view live across reloads and handles uploads', () => {
@@ -39,7 +48,11 @@ describe('Upload, WebSocket, reconnect regression', () => {
       .then((value) => {
         token = value
         expect(token).to.be.a('string').and.not.be.empty
-        return createForum(token, topic, [])
+        return createPersona(token, uniqueName('Realtime Persona'))
+      })
+      .then((id) => {
+        personaId = id
+        return createForum(token, topic, [personaId])
       })
       .then((id) => {
         forumId = id
@@ -55,6 +68,9 @@ describe('Upload, WebSocket, reconnect regression', () => {
         cy.request({
           method: 'POST',
           url: `http://127.0.0.1:8000/api/v1/forums/${forumId}/messages`,
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
           body: {
             forum_id: forumId,
             speaker_name: 'Smoke Bot',
@@ -72,6 +88,9 @@ describe('Upload, WebSocket, reconnect regression', () => {
         cy.request({
           method: 'POST',
           url: `http://127.0.0.1:8000/api/v1/forums/${forumId}/messages`,
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
           body: {
             forum_id: forumId,
             speaker_name: 'Smoke Bot',

@@ -49,6 +49,10 @@ class ForumService:
             
         if forum.status == "running":
             raise HTTPException(status_code=400, detail="Forum already running")
+
+        participants = get_forum_participants(self.db, forum_id)
+        if not participants:
+            raise HTTPException(status_code=400, detail="Forum must have at least one participant before starting")
             
         await scheduler.start_forum(forum_id, ablation_flags)
         return {"status": "started", "ablation_flags": ablation_flags}

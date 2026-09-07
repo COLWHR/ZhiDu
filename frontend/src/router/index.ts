@@ -2,13 +2,15 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import BasicLayout from '@/layouts/BasicLayout.vue'
 import UserLayout from '@/layouts/UserLayout.vue'
-import HomeView from '@/views/HomeView.vue'
-import LoginView from '@/views/LoginView.vue'
-import RegisterView from '@/views/RegisterView.vue'
-import PersonaView from '@/views/PersonaView.vue'
-import ForumDetailView from '@/views/ForumDetailView.vue'
-import AssistantView from '@/views/AssistantView.vue'
-import SkillRepositoryView from '@/views/SkillRepositoryView.vue'
+
+const HomeView = () => import('@/views/HomeView.vue')
+const LoginView = () => import('@/views/LoginView.vue')
+const RegisterView = () => import('@/views/RegisterView.vue')
+const PersonaView = () => import('@/views/PersonaView.vue')
+const ForumDetailView = () => import('@/views/ForumDetailView.vue')
+const AssistantView = () => import('@/views/AssistantView.vue')
+const SkillRepositoryView = () => import('@/views/SkillRepositoryView.vue')
+const TimeGateView = () => import('@/views/TimeGateView.vue')
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -64,7 +66,7 @@ const router = createRouter({
         {
           path: 'time-gate',
           name: 'time-gate',
-          component: () => import('@/views/TimeGateView.vue')
+          component: TimeGateView
         },
       ]
     },

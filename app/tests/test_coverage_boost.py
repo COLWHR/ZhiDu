@@ -11,6 +11,17 @@ def auth_header(client):
     token = client.post("/api/v1/auth/login", data={"username": username, "password": "p"}).json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
+
+def patch_real_god_agent(monkeypatch):
+    class FakeRealGodAgent:
+        def run(self, *args, **kwargs):
+            async def events():
+                yield {"type": "thought", "content": "mock god generation"}
+
+            return events()
+
+    monkeypatch.setattr("app.api.v1.endpoints.god.RealGodAgent", FakeRealGodAgent)
+
 def test_coverage_auth(client):
     # Coverage for auth error paths
     client.post("/api/v1/auth/login", data={"username": "none", "password": "p"})
@@ -64,7 +75,8 @@ def test_coverage_forums_edge_cases(client, auth_header):
     # Delete (hits 91-93)
     client.delete(f"/api/v1/forums/{f['id']}", headers=auth_header)
 
-def test_coverage_god_detailed(client, auth_header):
+def test_coverage_god_detailed(client, auth_header, monkeypatch):
+    patch_real_god_agent(monkeypatch)
     # Exercise both the compatibility endpoint and the streaming generator entry point.
     client.post("/api/v1/god/generate", json={"prompt": "test"}, headers=auth_header)
     client.post("/api/v1/god/generate_real", json={"prompt": "Short", "n": 1}, headers=auth_header)
@@ -80,7 +92,8 @@ def test_coverage_personas_detailed(client, auth_header):
     client.put(f"/api/v1/personas/{p_id}", json={"name": "U"}, headers=auth_header)
     client.delete(f"/api/v1/personas/{p_id}", headers=auth_header)
 
-def test_coverage_god(client, auth_header):
+def test_coverage_god(client, auth_header, monkeypatch):
+    patch_real_god_agent(monkeypatch)
     # Generate
     client.post("/api/v1/god/generate", json={"prompt": "Generate 1 person"}, headers=auth_header)
     # Generate Real (will be mocked or fast-fail)

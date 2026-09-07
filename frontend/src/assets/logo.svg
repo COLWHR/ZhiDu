@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="ZhiDo logo">
+  <rect width="128" height="128" rx="28" fill="#1a1d1e"/>
+  <rect x="12" y="12" width="104" height="104" rx="22" fill="#3bb36b"/>
+  <path d="M34 38h60l-30 52h30v10H34l30-52H34V38z" fill="#ffffff"/>
+</svg>

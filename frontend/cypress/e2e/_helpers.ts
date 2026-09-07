@@ -81,7 +81,12 @@ export const startForum = (token: string, forumId: number) => {
     headers: {
       Authorization: `Bearer ${token}`
     },
-    body: {}
+    body: {
+      ablation_flags: {
+        mock_llm: true,
+        no_summary: true
+      }
+    }
   })
 }
 

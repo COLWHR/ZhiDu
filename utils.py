@@ -241,7 +241,17 @@ def _sanitize_messages_for_text_model(messages):
     return sanitized
 
 
-def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, timeout=30, callback=None, raise_error=False, use_vision=False):
+def get_chat_completion(
+    messages,
+    stream=False,
+    json_mode=False,
+    max_retries=3,
+    timeout=30,
+    callback=None,
+    raise_error=False,
+    use_vision=False,
+    route=None,
+):
     """
     Wrapper for ZhipuAI chat completion with retry logic and timeout.
     
@@ -249,6 +259,7 @@ def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, 
         callback: Optional async function(error_msg: str) to report errors to system log
         raise_error: If True, raise the last exception instead of returning None when all retries fail.
         use_vision: If True, use volcanic engine visual model for multimodal input
+        route: Optional provider route hint for specialized model routing.
     """
     last_error = None
     
@@ -324,6 +335,7 @@ def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, 
     # 普通文本请求或火山引擎不可用，使用智谱AI
     client = _build_llm_client()
     text_messages = _sanitize_messages_for_text_model(messages)
+    route_kwargs = {"route": route} if route else {}
     attempt = 0
     while attempt < max_retries:
         try:
@@ -335,7 +347,8 @@ def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, 
                     temperature=0.8,
                     max_tokens=4096,
                     top_p=0.7,
-                    timeout=timeout
+                    timeout=timeout,
+                    **route_kwargs,
                 )
             
             response = client.chat.completions.create(
@@ -345,7 +358,8 @@ def get_chat_completion(messages, stream=False, json_mode=False, max_retries=3, 
                 temperature=0.8,
                 max_tokens=4096,
                 top_p=0.7,
-                timeout=timeout
+                timeout=timeout,
+                **route_kwargs,
             )
             return response
             

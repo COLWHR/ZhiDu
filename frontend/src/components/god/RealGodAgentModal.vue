@@ -17,8 +17,7 @@
               <img :src="assistantAvatarSrc" alt="智能体生成助手" />
             </a-avatar>
             <a-avatar v-else style="background-color: #3bb36b">
-              <img v-if="userAvatarSrc" :src="userAvatarSrc" :alt="authStore.user?.username || '用户'" />
-              <template v-else>{{ getAvatarInitial(authStore.user?.username, 'U') }}</template>
+              {{ getAvatarInitial(authStore.user?.username, 'U') }}
             </a-avatar>
           </div>
           <div class="content-wrapper">
@@ -146,7 +145,7 @@ import { message } from 'ant-design-vue'
 import { usePersonaStore } from '@/stores/persona'
 import { useAuthStore } from '@/stores/auth'
 import { SendOutlined } from '@ant-design/icons-vue'
-import { generatePersonaAvatar, getAvatarInitial, resolveBuiltInUserAvatarSrc } from '@/utils/avatar'
+import { generatePersonaAvatar, getAvatarInitial } from '@/utils/avatar'
 
 interface MessageItem {
   type: 'text' | 'thought' | 'search' | 'persona' | 'error' | 'status'
@@ -189,7 +188,6 @@ const messages = ref<ChatMessage[]>([])
 const loading = ref(false)
 const totalToGenerate = ref(1)
 const assistantAvatarSrc = generatePersonaAvatar('智造助手', 'agent-builder', 'real-god')
-const userAvatarSrc = computed(() => resolveBuiltInUserAvatarSrc(authStore.user))
 
 const visible = computed({
   get: () => props.open,

@@ -28,6 +28,11 @@ def test_root_endpoint(client):
         assert "text/html" in content_type
         assert '<div id="app"></div>' in response.text
 
+def test_health_endpoint(client):
+    response = client.get("/api/v1/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "message": "healthy"}
+
 def test_global_exception_handler(client):
     # Mocking a call that triggers an exception
     from app.api.v1.endpoints import auth

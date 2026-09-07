@@ -1,6 +1,5 @@
 import pytest
 import random
-import time
 from fastapi.testclient import TestClient
 
 def register_and_login(client):
@@ -75,13 +74,11 @@ def test_button_api_workflow(client):
     # Note: Start endpoint might be async or trigger background tasks
     start_res = client.post(
         f"/api/v1/forums/{forum_id}/start",
-        headers=headers
+        headers=headers,
+        json={"ablation_flags": {"mock_llm": True, "no_summary": True}},
     )
     # It might return 200 or 202
     assert start_res.status_code in [200, 202]
-    
-    # Wait for background task to start
-    time.sleep(1)
     
     # Verify status changed to running
     get_res = client.get(f"/api/v1/forums/{forum_id}", headers=headers)

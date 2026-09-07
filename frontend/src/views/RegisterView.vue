@@ -9,7 +9,7 @@
     <div class="auth-container fade-in-up">
       <div class="brand-section">
         <div class="logo float-animation">
-          <img src="@/assets/logo.png" alt="智渡" class="logo-icon" />
+          <img src="@/assets/logo.svg" alt="智渡" class="logo-icon" />
         </div>
         <h1 class="brand-title">智渡</h1>
         <p class="brand-slogan">多智能体圆桌会议，让思维碰撞出火花</p>

@@ -285,7 +285,7 @@ import { marked } from 'marked'
 import { useAuthStore } from '@/stores/auth'
 import { useDuxinStore } from '@/stores/duxin'
 import type { DuxinMessage, DuxinMode, DuxinTeamMember } from '@/types/duxin'
-import { generatePersonaAvatar, getAvatarInitial, resolveBuiltInUserAvatarSrc } from '@/utils/avatar'
+import { generatePersonaAvatar, getAvatarInitial } from '@/utils/avatar'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -383,8 +383,6 @@ const visibleTeamMembers = computed(() => {
 })
 
 const userInitial = computed(() => authStore.user?.username?.slice(0, 1).toUpperCase() || '你')
-
-const userAvatarSrc = computed(() => resolveBuiltInUserAvatarSrc(authStore.user))
 
 const flowStatus = computed(() => {
   if (store.streaming) return '智小渡正在判断'
@@ -512,7 +510,7 @@ const getCounselorAvatarSrc = (member?: DuxinTeamMember | null) => {
 }
 
 const getMessageAvatarSrc = (item: DuxinMessage) => {
-  if (item.role === 'user') return userAvatarSrc.value
+  if (item.role === 'user') return ''
   const team = item.metadata?.team
   const counselor = team?.members?.find(member => member.key !== 'zhidu')
   if (counselor) return getCounselorAvatarSrc(counselor)

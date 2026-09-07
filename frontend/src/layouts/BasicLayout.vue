@@ -10,7 +10,7 @@
       class="sider-layout"
     >
       <div class="logo" :class="{ collapsed }">
-        <img src="@/assets/logo.png" alt="智渡" class="logo-icon" />
+        <img src="@/assets/logo.svg" alt="智渡" class="logo-icon" />
         <span v-if="!collapsed" class="logo-text">智渡</span>
         <span v-else class="logo-text">智</span>
       </div>
@@ -55,8 +55,7 @@
               <div class="profile-panel">
                 <div class="profile-panel-header">
                   <a-avatar :size="52" class="profile-panel-avatar">
-                    <img v-if="userAvatarSrc" :src="userAvatarSrc" :alt="displayName" />
-                    <template v-else>{{ userInitial }}</template>
+                    {{ userInitial }}
                   </a-avatar>
                   <div>
                     <div class="profile-panel-name">{{ displayName }}</div>
@@ -71,21 +70,6 @@
                   <div>
                     <span>会话</span>
                     <strong>{{ authStore.token ? '已连接' : '未登录' }}</strong>
-                  </div>
-                </div>
-                <div class="profile-avatar-picker" data-test="profile-avatar-picker">
-                  <span>头像形象</span>
-                  <div>
-                    <button
-                      v-for="avatar in builtInUserAvatars"
-                      :key="avatar.id"
-                      type="button"
-                      :class="{ active: avatar.id === selectedUserAvatar.id }"
-                      :title="avatar.name"
-                      @click="selectUserAvatar(avatar.id)"
-                    >
-                      <img :src="avatar.src" :alt="avatar.name" />
-                    </button>
                   </div>
                 </div>
                 <div class="profile-panel-actions">
@@ -111,8 +95,7 @@
               data-test="sidebar-profile"
             >
               <a-avatar :size="collapsed ? 34 : 42" class="profile-avatar">
-                <img v-if="userAvatarSrc" :src="userAvatarSrc" :alt="displayName" />
-                <template v-else>{{ userInitial }}</template>
+                {{ userInitial }}
               </a-avatar>
               <span v-if="!collapsed" class="profile-meta">
                 <strong>{{ displayName }}</strong>
@@ -139,7 +122,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { builtInUserAvatars, resolveBuiltInUserAvatar, USER_AVATAR_STORAGE_KEY } from '@/utils/avatar'
+import { getAvatarInitial } from '@/utils/avatar'
 import {
   DashboardOutlined,
   TeamOutlined,
@@ -156,15 +139,10 @@ const router = useRouter()
 const authStore = useAuthStore()
 const collapsed = ref(false)
 const profileOpen = ref(false)
-const selectedUserAvatarId = ref(localStorage.getItem(USER_AVATAR_STORAGE_KEY) || '')
 
 const displayName = computed(() => authStore.user?.username || '未登录用户')
-const userInitial = computed(() => displayName.value[0]?.toUpperCase() || 'U')
+const userInitial = computed(() => getAvatarInitial(displayName.value, 'U'))
 const userIdLabel = computed(() => authStore.user?.id ?? '-')
-const selectedUserAvatar = computed(() => {
-  return resolveBuiltInUserAvatar(authStore.user, selectedUserAvatarId.value)
-})
-const userAvatarSrc = computed(() => selectedUserAvatar.value.src)
 const roleLabel = computed(() => {
   switch (authStore.user?.role) {
     case 'admin': return '管理员'
@@ -177,11 +155,6 @@ const roleLabel = computed(() => {
 const handleLogout = async () => {
   profileOpen.value = false
   await authStore.logout()
-}
-
-const selectUserAvatar = (avatarId: string) => {
-  selectedUserAvatarId.value = avatarId
-  localStorage.setItem(USER_AVATAR_STORAGE_KEY, avatarId)
 }
 
 const navigateTo = (path: string) => {
@@ -359,13 +332,7 @@ watch(() => authStore.token, (token) => {
   color: white;
   font-weight: 750;
   box-shadow: 0 8px 16px rgba(59, 179, 107, 0.24);
-}
-
-.profile-avatar :deep(img),
-.profile-panel-avatar :deep(img) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  font-size: 18px;
 }
 
 .profile-meta {
@@ -448,53 +415,6 @@ watch(() => authStore.token, (token) => {
 .profile-panel-grid strong {
   color: #151917;
   font-size: 14px;
-}
-
-.profile-avatar-picker {
-  border: 1px solid #e6eee8;
-  border-radius: 12px;
-  background: #f8fbf8;
-  padding: 10px;
-  margin-bottom: 12px;
-}
-
-.profile-avatar-picker > span {
-  display: block;
-  color: #7b887f;
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-
-.profile-avatar-picker > div {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.profile-avatar-picker button {
-  width: 42px;
-  height: 42px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  padding: 2px;
-  background: transparent;
-  cursor: pointer;
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-}
-
-.profile-avatar-picker button:hover,
-.profile-avatar-picker button.active {
-  transform: translateY(-1px);
-  border-color: #3bb36b;
-  box-shadow: 0 8px 16px rgba(59, 179, 107, 0.16);
-}
-
-.profile-avatar-picker img {
-  width: 100%;
-  height: 100%;
-  border-radius: 10px;
-  object-fit: cover;
-  display: block;
 }
 
 .profile-panel-actions {
